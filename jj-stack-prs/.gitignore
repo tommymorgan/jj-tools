@@ -1,0 +1,13 @@
+# Deno
+deno.lock
+
+# Build output
+jj-stack-prs
+
+# Test artifacts
+*.test.js
+*.test.d.ts
+
+# IDE
+.vscode/
+.idea/
