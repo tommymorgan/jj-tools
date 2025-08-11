@@ -1,0 +1,28 @@
+# Compiled binary
+jj-stack-prs
+
+# Test repositories
+test-repos/
+jj-stack-test/
+
+# Deno
+.deno/
+
+# Coverage
+coverage/
+cov_profile/
+
+# IDE
+.vscode/
+.idea/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Temporary files
+*.tmp
+*.log
+
+# Jujutsu
+.jj/
