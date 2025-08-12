@@ -10,6 +10,7 @@ A command-line tool for creating GitHub Pull Requests from your Jujutsu (jj) sta
 - 🧹 **Smart Cleanup** - Automatically removes temporary bookmarks when PRs are merged
 - 🔄 **Incremental Updates** - Updates existing PRs instead of creating duplicates
 - 🎯 **Draft/Ready States** - Bottom PR is ready for review, dependent PRs are drafts
+- ✅ **Linear Stack Validation** - Ensures your stack is linear (no merges or divergent branches)
 - 🚀 **Fast and Efficient** - Built with Deno for quick execution
 
 ## Installation
@@ -174,16 +175,22 @@ deno compile --allow-run --allow-read --allow-write --allow-env \
 
 ## Known Limitations
 
-- Only supports linear stacks (no diamond/merge patterns)
-- Requires GitHub CLI authentication
-- Auto-bookmarks use the `auto/` prefix (avoid creating manual bookmarks with this prefix)
-- Currently only supports GitHub (not GitLab, Bitbucket, etc.)
+- **Linear Stacks Only**: The tool only supports linear stacks (no diamond/merge patterns). If your stack contains merge commits or divergent branches, the tool will detect this and exit with an error. Use `jj rebase` to linearize your stack before running jj-stack-prs.
+- **GitHub CLI Required**: Requires GitHub CLI authentication (`gh auth login`)
+- **Auto-bookmark Prefix**: Tool-created bookmarks use the `auto/jjsp-` prefix. Manual bookmarks with `auto/` prefix are preserved during cleanup.
+- **GitHub Only**: Currently only supports GitHub (not GitLab, Bitbucket, etc.)
 
 ## Troubleshooting
 
 ### "No bookmarks found in current stack!"
 - Ensure you have bookmarks created for your changes
 - Use `--auto-bookmark` to automatically create bookmarks
+
+### "Non-linear stack detected!"
+- Your stack contains merge commits or divergent branches
+- Use `jj log` to visualize your stack structure
+- Use `jj rebase` to linearize your stack
+- Alternatively, work on separate linear branches
 
 ### "Broken pipe" error
 - This is a display issue that occurs with large output

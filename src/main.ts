@@ -8,6 +8,7 @@ import {
 	showHelp,
 	validateOptions,
 } from "./cli.ts";
+import { checkStackLinearity } from "./linearity_checker.ts";
 import { type PRChainInfo, PRDescriptionGenerator } from "./pr_description.ts";
 import {
 	type ExistingPR,
@@ -406,10 +407,33 @@ async function processStack(ctx: AppContext): Promise<void> {
 
 async function detectAndValidateStack(ctx: AppContext): Promise<StackInfo> {
 	console.log("🔍 Detecting stack...");
+	
+	// Check for non-linear stacks (BUG-004)
+	await ensureLinearStack(ctx.executor);
+	
 	const stack = await detectStack(ctx.executor, ctx.options.baseBranch);
 	validateStackBookmarks(stack, ctx.options);
 	console.log(`📚 Found stack with ${stack.bookmarks.length} bookmark(s)`);
 	return stack;
+}
+
+async function ensureLinearStack(executor: CommandExecutor): Promise<void> {
+	const linearityCheck = await checkStackLinearity(executor);
+	if (linearityCheck.isLinear) {
+		return;
+	}
+
+	console.error(`❌ ${linearityCheck.message}`);
+	if (linearityCheck.problematicCommits.length > 0) {
+		console.error("  Problematic commits:");
+		for (const commit of linearityCheck.problematicCommits) {
+			console.error(`    - ${commit}`);
+		}
+	}
+	console.error("\n⚠️  This tool only supports linear stacks!");
+	console.error("  Please resolve merge commits or divergent branches before using jj-stack-prs.");
+	console.error("  You can use 'jj rebase' to linearize your stack.");
+	Deno.exit(1);
 }
 
 async function processPRs(ctx: AppContext, stack: StackInfo): Promise<void> {

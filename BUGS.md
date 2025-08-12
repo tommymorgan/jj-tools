@@ -49,47 +49,6 @@ Full output should be displayed without errors
 
 
 
-### 🐛 BUG-004: Diamond/Merge Patterns Incorrectly Linearized
-**Status**: 🔴 Open  
-**Severity**: High  
-**Category**: Logic/Stack Detection  
-**Steps to Reproduce**:
-1. Create a diamond pattern:
-   - Base commit
-   - Two parallel branches from base
-   - Merge commit joining the branches
-2. Run `jj-stack-prs`
-3. Observe the PR chain structure
-
-**Expected Behavior**:
-Tool should either:
-- Reject diamond patterns with clear error
-- Handle parallel branches correctly
-- Create separate PR chains for each branch
-
-**Actual Behavior**:
-Diamond is incorrectly linearized into a single chain, creating wrong PR dependencies
-
-**Test Output**:
-```
-[1/4] 🆕 Creating PR: base → master
-[2/4] 🆕 Creating PR: left → base
-[3/4] 🆕 Creating PR: right → left     # WRONG: should be right → base
-[4/4] 🆕 Creating PR: merge-point → right  # WRONG: needs both parents
-```
-
-**Impact**:
-- Creates incorrect PR dependencies
-- PRs cannot be merged in correct order
-- Breaks for any non-linear history
-
-**Suggested Fix**:
-- Detect non-linear patterns and error out
-- Support only linear stacks explicitly
-- Add validation for stack linearity
-- Document this limitation clearly
-
----
 
 ### 🐛 BUG-005: Deleted Bookmarks Still Appear in Stack Detection
 **Status**: 🔴 Open  
@@ -213,7 +172,7 @@ Tool continues processing and may fail later with unclear errors
 ## Recommendations
 
 ### High Priority Fixes
-1. Fix diamond pattern handling (BUG-004)
+(All high priority bugs have been resolved)
 
 ### Medium Priority Fixes
 1. Handle broken pipe errors (BUG-001)
