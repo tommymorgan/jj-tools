@@ -6,6 +6,7 @@ export interface CLIOptions {
 	keepAuto: boolean;
 	cleanupAllAuto: boolean;
 	help: boolean;
+	version: boolean;
 	dryRun: boolean;
 }
 
@@ -17,10 +18,12 @@ export function parseArguments(args: string[]): CLIOptions {
 			"keep-auto",
 			"cleanup-all-auto",
 			"help",
+			"version",
 			"dry-run",
 		],
 		alias: {
 			h: "help",
+			v: "version",
 			b: "base",
 		},
 		default: {
@@ -28,6 +31,7 @@ export function parseArguments(args: string[]): CLIOptions {
 			"keep-auto": false,
 			"cleanup-all-auto": false,
 			help: false,
+			version: false,
 			"dry-run": false,
 		},
 	});
@@ -38,6 +42,7 @@ export function parseArguments(args: string[]): CLIOptions {
 		keepAuto: flags["keep-auto"] as boolean,
 		cleanupAllAuto: flags["cleanup-all-auto"] as boolean,
 		help: flags.help as boolean,
+		version: flags.version as boolean,
 		dryRun: flags["dry-run"] as boolean,
 	};
 }
@@ -80,6 +85,8 @@ OPTIONS:
   --dry-run             Show what would be done without making changes
   
   -h, --help            Show this help message
+  
+  -v, --version         Show version information
 
 EXAMPLES:
   # Create PRs for current stack

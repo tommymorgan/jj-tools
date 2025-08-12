@@ -9,6 +9,7 @@ import {
 	showHelp,
 	validateOptions,
 } from "./cli.ts";
+import { showVersion } from "./version.ts";
 import { checkStackLinearity } from "./linearity_checker.ts";
 import { type PRChainInfo, PRDescriptionGenerator } from "./pr_description.ts";
 import {
@@ -49,9 +50,13 @@ class SystemCommandExecutor implements CommandExecutor {
 }
 
 // Helper functions to reduce complexity
-async function handleHelp(options: CLIOptions): Promise<void> {
+async function handleHelpAndVersion(options: CLIOptions): Promise<void> {
 	if (options.help) {
 		safeLog(showHelp());
+		Deno.exit(0);
+	}
+	if (options.version) {
+		safeLog(await showVersion());
 		Deno.exit(0);
 	}
 }
@@ -511,7 +516,7 @@ async function main() {
 	installBrokenPipeHandlers();
 
 	const options = parseArguments(Deno.args);
-	await handleHelp(options);
+	await handleHelpAndVersion(options);
 	handleValidationErrors(validateOptions(options));
 
 	const executor = new SystemCommandExecutor();

@@ -80,6 +80,28 @@ describe("CLI Parser", () => {
 			assertEquals(options.dryRun, true);
 		});
 
+		it("should parse version flag", () => {
+			// Arrange
+			const args = ["--version"];
+
+			// Act
+			const options = parseArguments(args);
+
+			// Assert
+			assertEquals(options.version, true);
+		});
+
+		it("should parse version flag short form", () => {
+			// Arrange
+			const args = ["-v"];
+
+			// Act
+			const options = parseArguments(args);
+
+			// Assert
+			assertEquals(options.version, true);
+		});
+
 		it("should parse help flag", () => {
 			// Arrange
 			const args = ["--help"];
@@ -125,6 +147,7 @@ describe("CLI Parser", () => {
 				keepAuto: false,
 				cleanupAllAuto: false,
 				help: false,
+				version: false,
 				dryRun: false,
 			};
 
@@ -143,6 +166,7 @@ describe("CLI Parser", () => {
 				keepAuto: true,
 				cleanupAllAuto: true,
 				help: false,
+				version: false,
 				dryRun: false,
 			};
 
@@ -165,6 +189,7 @@ describe("CLI Parser", () => {
 				keepAuto: false,
 				cleanupAllAuto: false,
 				help: false,
+				version: false,
 				dryRun: false,
 			};
 

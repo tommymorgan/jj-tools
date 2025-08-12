@@ -54,7 +54,11 @@ function createRevsetMockExecutor(
 ): CommandExecutor {
 	return {
 		exec: async (cmd: string[]) => {
-			const logResponse = handleLogCommand(cmd, "(::@ | @::) & trunk()..", logOutput);
+			const logResponse = handleLogCommand(
+				cmd,
+				"(::@ | @::) & trunk()..",
+				logOutput,
+			);
 			if (logResponse) return logResponse;
 
 			const showResponse = handleShowCommand(cmd, showMap);

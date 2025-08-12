@@ -1,0 +1,182 @@
+name: CI and Release
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  test:
+    name: Test on ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+        
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Deno
+        uses: denoland/setup-deno@v1
+        with:
+          deno-version: vx.x.x
+
+      - name: Cache dependencies
+        uses: actions/cache@v3
+        with:
+          path: |
+            ~/.deno
+            ~/.cache/deno
+          key: ${{ runner.os }}-deno-${{ hashFiles('**/deno.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-deno-
+
+      - name: Run CI checks
+        run: deno task ci
+
+      - name: Validate version bump (main branch only)
+        if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+        run: deno run --allow-read --allow-run --allow-env scripts/check-version.ts --ci
+
+      - name: Build binary
+        run: |
+          deno compile \
+            --allow-run \
+            --allow-read \
+            --allow-write \
+            --allow-env \
+            --output jj-stack-prs \
+            src/main.ts
+
+      - name: Test binary execution
+        run: ./jj-stack-prs --help
+        if: runner.os != 'Windows'
+        
+      - name: Test binary execution (Windows)
+        run: .\jj-stack-prs.exe --help
+        if: runner.os == 'Windows'
+
+  build-release:
+    name: Build Release Binaries
+    needs: test
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Deno
+        uses: denoland/setup-deno@v1
+        with:
+          deno-version: vx.x.x
+
+      - name: Get version from deno.json
+        id: get_version
+        run: |
+          VERSION=$(grep -o '"version": "[^"]*"' deno.json | cut -d'"' -f4)
+          echo "VERSION=v${VERSION}" >> $GITHUB_OUTPUT
+          echo "Building version: v${VERSION}"
+
+      - name: Check if release exists
+        id: check_release
+        run: |
+          if gh release view "${{ steps.get_version.outputs.VERSION }}" > /dev/null 2>&1; then
+            echo "EXISTS=true" >> $GITHUB_OUTPUT
+            echo "Release ${{ steps.get_version.outputs.VERSION }} already exists, skipping..."
+          else
+            echo "EXISTS=false" >> $GITHUB_OUTPUT
+            echo "Release ${{ steps.get_version.outputs.VERSION }} does not exist, proceeding..."
+          fi
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build all platform binaries
+        if: steps.check_release.outputs.EXISTS == 'false'
+        run: |
+          # Create builds directory
+          mkdir -p builds
+          
+          # Linux x64
+          echo "Building Linux AMD64..."
+          deno compile \
+            --allow-run --allow-read --allow-write --allow-env \
+            --target x86_64-unknown-linux-gnu \
+            --output builds/jj-stack-prs-linux-amd64 \
+            src/main.ts
+          
+          # Linux ARM64
+          echo "Building Linux ARM64..."
+          deno compile \
+            --allow-run --allow-read --allow-write --allow-env \
+            --target aarch64-unknown-linux-gnu \
+            --output builds/jj-stack-prs-linux-arm64 \
+            src/main.ts
+          
+          # macOS x64
+          echo "Building macOS AMD64..."
+          deno compile \
+            --allow-run --allow-read --allow-write --allow-env \
+            --target x86_64-apple-darwin \
+            --output builds/jj-stack-prs-macos-amd64 \
+            src/main.ts
+          
+          # macOS ARM64 (M1/M2)
+          echo "Building macOS ARM64..."
+          deno compile \
+            --allow-run --allow-read --allow-write --allow-env \
+            --target aarch64-apple-darwin \
+            --output builds/jj-stack-prs-macos-arm64 \
+            src/main.ts
+          
+          # Windows x64
+          echo "Building Windows AMD64..."
+          deno compile \
+            --allow-run --allow-read --allow-write --allow-env \
+            --target x86_64-pc-windows-msvc \
+            --output builds/jj-stack-prs-windows-amd64.exe \
+            src/main.ts
+
+      - name: Create archives
+        if: steps.check_release.outputs.EXISTS == 'false'
+        run: |
+          cd builds
+          
+          # Create tar.gz archives for Linux and macOS
+          tar czf jj-stack-prs-linux-amd64.tar.gz jj-stack-prs-linux-amd64
+          tar czf jj-stack-prs-linux-arm64.tar.gz jj-stack-prs-linux-arm64
+          tar czf jj-stack-prs-macos-amd64.tar.gz jj-stack-prs-macos-amd64
+          tar czf jj-stack-prs-macos-arm64.tar.gz jj-stack-prs-macos-arm64
+          
+          # Create zip archive for Windows
+          zip jj-stack-prs-windows-amd64.zip jj-stack-prs-windows-amd64.exe
+          
+          # Create checksums
+          sha256sum *.tar.gz *.zip > checksums.txt
+          
+          # List files for verification
+          ls -la
+
+      - name: Create GitHub Release
+        if: steps.check_release.outputs.EXISTS == 'false'
+        uses: softprops/action-gh-release@v1
+        with:
+          tag_name: ${{ steps.get_version.outputs.VERSION }}
+          name: Release ${{ steps.get_version.outputs.VERSION }}
+          files: |
+            builds/*.tar.gz
+            builds/*.zip
+            builds/checksums.txt
+          generate_release_notes: true
+          draft: false
+          prerelease: ${{ contains(steps.get_version.outputs.VERSION, 'alpha') || contains(steps.get_version.outputs.VERSION, 'beta') || contains(steps.get_version.outputs.VERSION, 'rc') }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

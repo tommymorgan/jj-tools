@@ -1,9 +1,10 @@
 {
+	"version": "0.1.0",
 	"tasks": {
 		"test": "deno test --allow-run --allow-read --allow-write --allow-env",
 		"test:watch": "deno test --allow-run --allow-read --allow-write --allow-env --watch",
 		"run": "deno run --allow-run --allow-read --allow-write --allow-env src/main.ts",
-		"compile": "deno compile --allow-run --allow-read --allow-write --allow-env --output jj-stack-prs src/main.ts",
+		"compile": "deno run --allow-read --allow-write --allow-run scripts/build.ts",
 		"typecheck": "deno check src/**/*.ts tests/**/*.ts",
 		"lint": "npx @biomejs/biome@latest lint .",
 		"lint:fix": "npx @biomejs/biome@latest lint --fix .",
@@ -12,14 +13,15 @@
 		"check": "npx @biomejs/biome@latest check .",
 		"check:fix": "npx @biomejs/biome@latest check --fix .",
 		"verify": "deno task typecheck && deno task lint && deno task test",
-		"ci": "deno task verify"
+		"ci": "deno task format:check && deno task verify"
 	},
 	"imports": {
 		"@std/testing": "https://deno.land/std@0.210.0/testing/mod.ts",
 		"@std/testing/bdd": "https://deno.land/std@0.210.0/testing/bdd.ts",
 		"@std/assert": "https://deno.land/std@0.210.0/assert/mod.ts",
 		"@std/flags": "https://deno.land/std@0.210.0/flags/mod.ts",
-		"@std/fmt": "https://deno.land/std@0.210.0/fmt/mod.ts"
+		"@std/fmt": "https://deno.land/std@0.210.0/fmt/mod.ts",
+		"@std/semver": "https://deno.land/std@0.210.0/semver/mod.ts"
 	},
 	"compilerOptions": {
 		"strict": true,

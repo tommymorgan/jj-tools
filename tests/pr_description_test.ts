@@ -260,7 +260,10 @@ Run \`npm test\``;
 			const today = new Date().toISOString().split("T")[0];
 
 			// Assert
-			assertStringIncludes(description, `PR Stack (review in order) as of ${today}`);
+			assertStringIncludes(
+				description,
+				`PR Stack (review in order) as of ${today}`,
+			);
 		});
 	});
 
@@ -375,7 +378,10 @@ Created with jj (Jujutsu) stack-prs`;
 			const formatted = generator.formatChainItem(item, true, 2);
 
 			// Assert
-			assertEquals(formatted, "2. **PR #102: feature-2 → feature-1 (draft)** ← You are here");
+			assertEquals(
+				formatted,
+				"2. **PR #102: feature-2 → feature-1 (draft)** ← You are here",
+			);
 		});
 
 		it("should handle PR without number", () => {

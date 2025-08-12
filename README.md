@@ -19,11 +19,38 @@ A command-line tool for creating GitHub Pull Requests from your Jujutsu (jj) sta
 
 - [Jujutsu (jj)](https://github.com/martinvonz/jj) - Version control system
 - [GitHub CLI (gh)](https://cli.github.com/) - Authenticated with your GitHub account
-- [Deno](https://deno.land/) - JavaScript/TypeScript runtime (for development)
+- [Deno](https://deno.land/) - JavaScript/TypeScript runtime (only for development)
 
-### Download Binary
+### Download Pre-built Binary
 
-Download the latest binary from the [releases page](https://github.com/tommymorgan/jj-tools/releases) and add it to your PATH.
+Download the latest binary for your platform from the [releases page](https://github.com/tommymorgan/jj-tools/releases).
+
+#### Linux
+```bash
+# Download the binary (choose amd64 or arm64)
+wget https://github.com/tommymorgan/jj-tools/releases/latest/download/jj-stack-prs-linux-amd64.tar.gz
+tar xzf jj-stack-prs-linux-amd64.tar.gz
+chmod +x jj-stack-prs-linux-amd64
+sudo mv jj-stack-prs-linux-amd64 /usr/local/bin/jj-stack-prs
+```
+
+#### macOS
+```bash
+# For Intel Macs
+wget https://github.com/tommymorgan/jj-tools/releases/latest/download/jj-stack-prs-macos-amd64.tar.gz
+tar xzf jj-stack-prs-macos-amd64.tar.gz
+
+# For Apple Silicon (M1/M2/M3)
+wget https://github.com/tommymorgan/jj-tools/releases/latest/download/jj-stack-prs-macos-arm64.tar.gz
+tar xzf jj-stack-prs-macos-arm64.tar.gz
+
+# Install
+chmod +x jj-stack-prs-macos-*
+sudo mv jj-stack-prs-macos-* /usr/local/bin/jj-stack-prs
+```
+
+#### Windows
+Download `jj-stack-prs-windows-amd64.zip` from the releases page, extract it, and add the executable to your PATH.
 
 ### Build from Source
 
@@ -32,9 +59,8 @@ Download the latest binary from the [releases page](https://github.com/tommymorg
 git clone https://github.com/tommymorgan/jj-tools.git
 cd jj-tools
 
-# Install dependencies and compile
-deno compile --allow-run --allow-read --allow-write --allow-env \
-  --output=jj-stack-prs src/main.ts
+# Compile the binary (reads version from deno.json)
+deno task compile
 
 # Move to your PATH
 sudo mv jj-stack-prs /usr/local/bin/
@@ -111,6 +137,7 @@ This will:
 | `--cleanup-all-auto` | Force cleanup of all auto/* bookmarks |
 | `--dry-run` | Show what would be done without making changes |
 | `-h, --help` | Show help message |
+| `-v, --version` | Show version information |
 
 ## How It Works
 

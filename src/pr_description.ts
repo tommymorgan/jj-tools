@@ -133,7 +133,11 @@ export class PRDescriptionGenerator {
 		return "ready for review";
 	}
 
-	formatChainItem(item: PRChainInfo, isCurrent: boolean, orderNumber: number): string {
+	formatChainItem(
+		item: PRChainInfo,
+		isCurrent: boolean,
+		orderNumber: number,
+	): string {
 		const status = this.formatPRStatus(item.isDraft, item.isReady);
 
 		let line: string;
