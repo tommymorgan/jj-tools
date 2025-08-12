@@ -21,7 +21,7 @@ async function getJjLogOutput(executor: CommandExecutor): Promise<string> {
 		"jj",
 		"log",
 		"-r",
-		"::@ & trunk()..",
+		"(::@ | @::) & trunk()..",
 		"--no-graph",
 		"--template",
 		'bookmarks ++ "\\n"',

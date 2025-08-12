@@ -42,7 +42,7 @@ export class AutoBookmarkManager {
 			"log",
 			"--no-graph",
 			"-r",
-			"::@ & trunk()..",
+			"(::@ | @::) & trunk()..",
 			"--template",
 			'change_id ++ " " ++ bookmarks ++ "\\n"',
 		]);
