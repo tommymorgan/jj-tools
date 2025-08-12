@@ -124,7 +124,8 @@ export class AutoBookmarkManager {
 			cleaned = cleaned.substring(0, 30);
 		}
 
-		return `auto/${cleaned}-${shortId}`;
+		// Include a marker "jjsp" (jj-stack-prs) to identify auto-created bookmarks
+		return `auto/jjsp-${cleaned}-${shortId}`;
 	}
 
 	async createAutoBookmark(change: UnbookmarkedChange): Promise<AutoBookmark> {
@@ -162,7 +163,8 @@ export class AutoBookmarkManager {
 
 		for (const line of lines) {
 			const trimmed = line.trim();
-			if (trimmed.startsWith("auto/")) {
+			// Only find bookmarks created by this tool (with jjsp marker)
+			if (trimmed.startsWith("auto/jjsp-")) {
 				// Extract just the bookmark name from the line
 				// Format is: "bookmark-name: commit-info..."
 				const bookmarkName = trimmed.split(":")[0].trim();

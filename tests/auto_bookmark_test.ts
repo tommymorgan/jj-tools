@@ -229,7 +229,7 @@ def456 feature-2`;
 			// Act & Assert
 			assertEquals(
 				manager.generateBookmarkName("feat: add user authentication", "abc123"),
-				"auto/add-user-authentication-abc123",
+				"auto/jjsp-add-user-authentication-abc123",
 			);
 
 			assertEquals(
@@ -237,12 +237,12 @@ def456 feature-2`;
 					"fix(auth): resolve login bug #123",
 					"def456",
 				),
-				"auto/resolve-login-bug-123-def456",
+				"auto/jjsp-resolve-login-bug-123-def456",
 			);
 
 			assertEquals(
 				manager.generateBookmarkName("chore: update dependencies", "ghi789"),
-				"auto/update-dependencies-ghi789",
+				"auto/jjsp-update-dependencies-ghi789",
 			);
 		});
 
@@ -261,11 +261,12 @@ def456 feature-2`;
 			// Assert
 			assertEquals(bookmarkName.startsWith("auto/"), true);
 			assertEquals(bookmarkName.endsWith("-abc123"), true);
-			// Check that the middle part is truncated to 30 chars
+			// Check that the middle part (including "jjsp-" prefix) is truncated to reasonable length
 			const middlePart = bookmarkName
 				.replace("auto/", "")
 				.replace("-abc123", "");
-			assertEquals(middlePart.length <= 30, true);
+			// The middle part now includes "jjsp-" (5 chars) + up to 30 chars of message
+		assertEquals(middlePart.length <= 35, true);
 		});
 
 		it("should handle special characters in commit messages", () => {
@@ -277,7 +278,7 @@ def456 feature-2`;
 			// Act & Assert
 			assertEquals(
 				manager.generateBookmarkName("feat: add user@email support!", "abc123"),
-				"auto/add-user-email-support-abc123",
+				"auto/jjsp-add-user-email-support-abc123",
 			);
 
 			assertEquals(
@@ -285,7 +286,7 @@ def456 feature-2`;
 					"fix: resolve (bug) in [module]",
 					"def456",
 				),
-				"auto/resolve-bug-in-module-def456",
+				"auto/jjsp-resolve-bug-in-module-def456",
 			);
 		});
 	});
@@ -311,13 +312,13 @@ def456 feature-2`;
 			const bookmark = await manager.createAutoBookmark(change);
 
 			// Assert
-			assertEquals(bookmark.name, "auto/add-authentication-abc123");
+			assertEquals(bookmark.name, "auto/jjsp-add-authentication-abc123");
 			assertEquals(bookmark.changeId, "abc123");
 			assertEquals(bookmark.isTemporary, true);
 			assertEquals(capturedCommand.includes("bookmark"), true);
 			assertEquals(capturedCommand.includes("create"), true);
 			assertEquals(
-				capturedCommand.includes("auto/add-authentication-abc123"),
+				capturedCommand.includes("auto/jjsp-add-authentication-abc123"),
 				true,
 			);
 			assertEquals(capturedCommand.includes("-r"), true);
@@ -326,14 +327,14 @@ def456 feature-2`;
 	});
 
 	describe("findAutoBookmarks", () => {
-		it("should list all auto/* bookmarks", async () => {
+		it("should not find manual bookmarks with auto/ prefix (BUG-003 fix)", async () => {
+			// This test verifies that manual bookmarks with auto/ prefix are protected
 			// Arrange
 			const bookmarkOutput = `
-                auto/feature-abc123
-                feature-1
-                auto/fix-bug-def456
-                master
-                auto/update-deps-ghi789
+                auto/manual-bookmark
+                auto/user-created-bookmark
+                auto/jjsp-tool-created-abc123
+                auto/another-manual
               `;
 
 			const mockExecutor: CommandExecutor = {
@@ -350,11 +351,46 @@ def456 feature-2`;
 			// Act
 			const autoBookmarks = await manager.findAutoBookmarks();
 
-			// Assert
+			// Assert - should ONLY find the jjsp- prefixed bookmark
+			assertEquals(autoBookmarks.length, 1);
+			assertEquals(autoBookmarks[0], "auto/jjsp-tool-created-abc123");
+			// Manual bookmarks should NOT be found
+			assertEquals(autoBookmarks.includes("auto/manual-bookmark"), false);
+			assertEquals(autoBookmarks.includes("auto/user-created-bookmark"), false);
+			assertEquals(autoBookmarks.includes("auto/another-manual"), false);
+		});
+
+		it("should list only auto/jjsp-* bookmarks created by tool", async () => {
+			// Arrange
+			const bookmarkOutput = `
+                auto/jjsp-feature-abc123
+                feature-1
+                auto/manual-bookmark
+                auto/jjsp-fix-bug-def456
+                master
+                auto/jjsp-update-deps-ghi789
+                auto/user-created
+              `;
+
+			const mockExecutor: CommandExecutor = {
+				exec: async (cmd: string[]) => {
+					return (
+						handleBookmarkListCommand(cmd, bookmarkOutput) ||
+						createMockResponse("", "Unknown command", 1)
+					);
+				},
+			};
+
+			const manager = new AutoBookmarkManager(mockExecutor);
+
+			// Act
+			const autoBookmarks = await manager.findAutoBookmarks();
+
+			// Assert - should only find jjsp- prefixed bookmarks
 			assertEquals(autoBookmarks.length, 3);
-			assertEquals(autoBookmarks[0], "auto/feature-abc123");
-			assertEquals(autoBookmarks[1], "auto/fix-bug-def456");
-			assertEquals(autoBookmarks[2], "auto/update-deps-ghi789");
+			assertEquals(autoBookmarks[0], "auto/jjsp-feature-abc123");
+			assertEquals(autoBookmarks[1], "auto/jjsp-fix-bug-def456");
+			assertEquals(autoBookmarks[2], "auto/jjsp-update-deps-ghi789");
 		});
 
 		it("should return empty array when no auto bookmarks exist", async () => {
@@ -385,10 +421,11 @@ def456 feature-2`;
 
 		it("should extract bookmark names from jj bookmark list output with commit info", async () => {
 			// Arrange - simulating real jj bookmark list output
-			const bookmarkOutput = `auto/add-settings-xvrxqs: xvrxqsnr da0c8c10 feat: add settings
-auto/add-middleware-layer-pqyzym: pqyzymlo 10e7c205 feat: add middleware layer
+			const bookmarkOutput = `auto/jjsp-add-settings-xvrxqs: xvrxqsnr da0c8c10 feat: add settings
+auto/manual-bookmark: abcdefgh 12345678 manual change
+auto/jjsp-add-middleware-layer-pqyzym: pqyzymlo 10e7c205 feat: add middleware layer
 master: mzmwrosu 606382ed Initial commit
-auto/add-user-profile-szqzyp: szqzyprq bd5c84f0 feat: add user profile`;
+auto/jjsp-add-user-profile-szqzyp: szqzyprq bd5c84f0 feat: add user profile`;
 
 			const mockExecutor: CommandExecutor = {
 				exec: async (cmd: string[]) => {
@@ -404,11 +441,11 @@ auto/add-user-profile-szqzyp: szqzyprq bd5c84f0 feat: add user profile`;
 			// Act
 			const bookmarks = await manager.findAutoBookmarks();
 
-			// Assert
+			// Assert - should only find jjsp- prefixed bookmarks
 			assertEquals(bookmarks.length, 3);
-			assertEquals(bookmarks[0], "auto/add-settings-xvrxqs");
-			assertEquals(bookmarks[1], "auto/add-middleware-layer-pqyzym");
-			assertEquals(bookmarks[2], "auto/add-user-profile-szqzyp");
+			assertEquals(bookmarks[0], "auto/jjsp-add-settings-xvrxqs");
+			assertEquals(bookmarks[1], "auto/jjsp-add-middleware-layer-pqyzym");
+			assertEquals(bookmarks[2], "auto/jjsp-add-user-profile-szqzyp");
 			// Should not include the commit info
 			assertEquals(
 				bookmarks.some((b) => b.includes("xvrxqsnr")),
@@ -426,9 +463,9 @@ auto/add-user-profile-szqzyp: szqzyprq bd5c84f0 feat: add user profile`;
 			// Arrange
 			const deletedBookmarks: string[] = [];
 			const prStateMap = {
-				"auto/feature-abc123": "MERGED",
-				"auto/fix-bug-def456": "CLOSED",
-				"auto/update-deps-ghi789": "OPEN",
+				"auto/jjsp-feature-abc123": "MERGED",
+				"auto/jjsp-fix-bug-def456": "CLOSED",
+				"auto/jjsp-update-deps-ghi789": "OPEN",
 			};
 
 			const mockExecutor = createCleanupMockExecutor(
@@ -438,9 +475,9 @@ auto/add-user-profile-szqzyp: szqzyprq bd5c84f0 feat: add user profile`;
 
 			const manager = new AutoBookmarkManager(mockExecutor);
 			const autoBookmarks = [
-				"auto/feature-abc123",
-				"auto/fix-bug-def456",
-				"auto/update-deps-ghi789",
+				"auto/jjsp-feature-abc123",
+				"auto/jjsp-fix-bug-def456",
+				"auto/jjsp-update-deps-ghi789",
 			];
 
 			// Act
@@ -448,10 +485,10 @@ auto/add-user-profile-szqzyp: szqzyprq bd5c84f0 feat: add user profile`;
 
 			// Assert
 			assertEquals(result.deleted.length, 2);
-			assertEquals(result.deleted.includes("auto/feature-abc123"), true);
-			assertEquals(result.deleted.includes("auto/fix-bug-def456"), true);
+			assertEquals(result.deleted.includes("auto/jjsp-feature-abc123"), true);
+			assertEquals(result.deleted.includes("auto/jjsp-fix-bug-def456"), true);
 			assertEquals(result.kept.length, 1);
-			assertEquals(result.kept.includes("auto/update-deps-ghi789"), true);
+			assertEquals(result.kept.includes("auto/jjsp-update-deps-ghi789"), true);
 			assertEquals(deletedBookmarks.length, 2);
 		});
 
@@ -462,16 +499,16 @@ auto/add-user-profile-szqzyp: szqzyprq bd5c84f0 feat: add user profile`;
 			const mockExecutor = createCleanupMockExecutor({}, deletedBookmarks);
 
 			const manager = new AutoBookmarkManager(mockExecutor);
-			const autoBookmarks = ["auto/orphaned-abc123"];
+			const autoBookmarks = ["auto/jjsp-orphaned-abc123"];
 
 			// Act
 			const result = await manager.cleanupMergedAutoBookmarks(autoBookmarks);
 
 			// Assert
 			assertEquals(result.deleted.length, 1);
-			assertEquals(result.deleted[0], "auto/orphaned-abc123");
+			assertEquals(result.deleted[0], "auto/jjsp-orphaned-abc123");
 			assertEquals(result.kept.length, 0);
-			assertEquals(deletedBookmarks[0], "auto/orphaned-abc123");
+			assertEquals(deletedBookmarks[0], "auto/jjsp-orphaned-abc123");
 		});
 	});
 
@@ -484,13 +521,13 @@ auto/add-user-profile-szqzyp: szqzyprq bd5c84f0 feat: add user profile`;
 
 			const manager = new AutoBookmarkManager(mockExecutor);
 			const autoBookmarks = [
-				"auto/in-stack-abc123",
-				"auto/orphaned-def456",
-				"auto/also-orphaned-ghi789",
+				"auto/jjsp-in-stack-abc123",
+				"auto/jjsp-orphaned-def456",
+				"auto/jjsp-also-orphaned-ghi789",
 			];
 			const currentStackBookmarks = [
 				"feature-1",
-				"auto/in-stack-abc123",
+				"auto/jjsp-in-stack-abc123",
 				"feature-2",
 			];
 
@@ -502,10 +539,10 @@ auto/add-user-profile-szqzyp: szqzyprq bd5c84f0 feat: add user profile`;
 
 			// Assert
 			assertEquals(result.deleted.length, 2);
-			assertEquals(result.deleted.includes("auto/orphaned-def456"), true);
-			assertEquals(result.deleted.includes("auto/also-orphaned-ghi789"), true);
+			assertEquals(result.deleted.includes("auto/jjsp-orphaned-def456"), true);
+			assertEquals(result.deleted.includes("auto/jjsp-also-orphaned-ghi789"), true);
 			assertEquals(result.kept.length, 1);
-			assertEquals(result.kept[0], "auto/in-stack-abc123");
+			assertEquals(result.kept[0], "auto/jjsp-in-stack-abc123");
 			assertEquals(deletedBookmarks.length, 2);
 		});
 	});

@@ -48,39 +48,6 @@ Full output should be displayed without errors
 ---
 
 
-### 🐛 BUG-003: Manual Bookmarks with auto/ Prefix Are Deleted
-**Status**: 🔴 Open  
-**Severity**: High  
-**Category**: Data Loss  
-**Steps to Reproduce**:
-1. Manually create a bookmark with auto/ prefix: `jj bookmark create auto/manual-bookmark`
-2. Run `jj-stack-prs --cleanup-all-auto`
-3. Observe that the manually created bookmark is deleted
-
-**Expected Behavior**:
-Only auto-generated bookmarks should be deleted, not manually created ones with auto/ prefix
-
-**Actual Behavior**:
-ALL bookmarks with auto/ prefix are deleted, including manually created ones
-
-**Test Output**:
-```
-🧹 Cleaning up auto-bookmarks...
-  - Deleted: auto/manual-auto-bookmark
-```
-
-**Impact**:
-- Data loss: Users may lose manually created bookmarks
-- No way to distinguish between auto-generated and manual auto/ bookmarks
-- Violates principle of least surprise
-
-**Suggested Fix**:
-- Store metadata about which bookmarks were auto-created
-- Use a different prefix like `.auto/` or `_auto/`
-- Add a confirmation prompt when deleting bookmarks
-- Track auto-created bookmarks in a local file
-
----
 
 ### 🐛 BUG-004: Diamond/Merge Patterns Incorrectly Linearized
 **Status**: 🔴 Open  
@@ -246,9 +213,7 @@ Tool continues processing and may fail later with unclear errors
 ## Recommendations
 
 ### High Priority Fixes
-1. Fix trunk filtering (BUG-002)
-2. Fix diamond pattern handling (BUG-004)
-3. Protect manual auto/ bookmarks (BUG-003)
+1. Fix diamond pattern handling (BUG-004)
 
 ### Medium Priority Fixes
 1. Handle broken pipe errors (BUG-001)
