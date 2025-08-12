@@ -16,6 +16,11 @@ import {
 	PullRequestManager,
 } from "./pr_manager.ts";
 import {
+	installBrokenPipeHandlers,
+	safeError,
+	safeLog,
+} from "./safe_output.ts";
+import {
 	type CommandExecutor,
 	detectStack,
 	type StackInfo,
@@ -45,16 +50,16 @@ class SystemCommandExecutor implements CommandExecutor {
 // Helper functions to reduce complexity
 async function handleHelp(options: CLIOptions): Promise<void> {
 	if (options.help) {
-		console.log(showHelp());
+		safeLog(showHelp());
 		Deno.exit(0);
 	}
 }
 
 function handleValidationErrors(errors: string[]): void {
 	if (errors.length > 0) {
-		console.error("❌ Invalid options:");
+		safeError("❌ Invalid options:");
 		for (const error of errors) {
-			console.error(`  - ${error}`);
+			safeError(`  - ${error}`);
 		}
 		Deno.exit(1);
 	}
@@ -67,7 +72,7 @@ async function cleanupAutoBookmarks(
 ): Promise<void> {
 	if (options.keepAuto) return;
 
-	console.log("🧹 Cleaning up auto-bookmarks...");
+	safeLog("🧹 Cleaning up auto-bookmarks...");
 	const autoBookmarks = await autoBookmarkManager.findAutoBookmarks();
 
 	if (options.cleanupAllAuto) {
@@ -86,7 +91,7 @@ async function forceCleanupAllAutoBookmarks(
 		if (!options.dryRun) {
 			await executor.exec(["jj", "bookmark", "delete", bookmark]);
 		}
-		console.log(`  - Deleted: ${bookmark}`);
+		safeLog(`  - Deleted: ${bookmark}`);
 	}
 }
 
@@ -97,7 +102,7 @@ async function cleanupMergedAutoBookmarks(
 	const cleanupResult =
 		await autoBookmarkManager.cleanupMergedAutoBookmarks(autoBookmarks);
 	for (const deleted of cleanupResult.deleted) {
-		console.log(`  - ${deleted}: PR merged/closed ✓ deleted`);
+		safeLog(`  - ${deleted}: PR merged/closed ✓ deleted`);
 	}
 }
 
@@ -107,12 +112,12 @@ async function handleUnbookmarkedChanges(
 ): Promise<void> {
 	if (!options.autoBookmark) return;
 
-	console.log("🔍 Checking for unbookmarked changes...");
+	safeLog("🔍 Checking for unbookmarked changes...");
 	const unbookmarked = await autoBookmarkManager.findUnbookmarkedChanges();
 
 	if (unbookmarked.length === 0) return;
 
-	console.log(`⚠️  Found ${unbookmarked.length} unbookmarked change(s)`);
+	safeLog(`⚠️  Found ${unbookmarked.length} unbookmarked change(s)`);
 
 	for (const change of unbookmarked) {
 		await processUnbookmarkedChange(change, options, autoBookmarkManager);
@@ -124,17 +129,17 @@ async function processUnbookmarkedChange(
 	options: CLIOptions,
 	autoBookmarkManager: AutoBookmarkManager,
 ): Promise<void> {
-	console.log(`  - ${change.changeId}: ${change.description}`);
+	safeLog(`  - ${change.changeId}: ${change.description}`);
 
 	if (!options.dryRun) {
 		const autoBookmark = await autoBookmarkManager.createAutoBookmark(change);
-		console.log(`  🔖 Created auto-bookmark: ${autoBookmark.name}`);
+		safeLog(`  🔖 Created auto-bookmark: ${autoBookmark.name}`);
 	} else {
 		const bookmarkName = autoBookmarkManager.generateBookmarkName(
 			change.description,
 			change.changeId,
 		);
-		console.log(`  🔖 Would create: ${bookmarkName}`);
+		safeLog(`  🔖 Would create: ${bookmarkName}`);
 	}
 }
 
@@ -142,25 +147,25 @@ function validateStackBookmarks(stack: StackInfo, options: CLIOptions): void {
 	if (stack.bookmarks.length > 0) return;
 
 	if (!options.autoBookmark) {
-		console.error("❌ No bookmarks found in current stack!");
-		console.error("\nCreate bookmarks for your changes. Examples:");
-		console.error("  jj bookmark create <name> -r @   # for current change");
-		console.error("  jj bookmark create <name> -r @-  # for previous change");
-		console.error(
+		safeError("❌ No bookmarks found in current stack!");
+		safeError("\nCreate bookmarks for your changes. Examples:");
+		safeError("  jj bookmark create <name> -r @   # for current change");
+		safeError("  jj bookmark create <name> -r @-  # for previous change");
+		safeError(
 			"  jj bookmark create <name> -r @-- # for change before that",
 		);
-		console.error("\nOr use --auto-bookmark to automatically create bookmarks");
+		safeError("\nOr use --auto-bookmark to automatically create bookmarks");
 		Deno.exit(1);
 	}
 
 	if (options.dryRun) {
-		console.log(
+		safeLog(
 			"\n✨ Dry run complete. Would have created auto-bookmarks and PRs.",
 		);
 		Deno.exit(0);
 	}
 
-	console.error("❌ No bookmarks found after auto-bookmark creation!");
+	safeError("❌ No bookmarks found after auto-bookmark creation!");
 	Deno.exit(1);
 }
 
@@ -168,16 +173,16 @@ async function pushBookmarksToGitHub(
 	options: CLIOptions,
 	executor: CommandExecutor,
 ): Promise<void> {
-	console.log("🚀 Pushing bookmarks to GitHub...");
+	safeLog("🚀 Pushing bookmarks to GitHub...");
 
 	if (options.dryRun) {
-		console.log("  (dry-run: would push all bookmarks)");
+		safeLog("  (dry-run: would push all bookmarks)");
 		return;
 	}
 
 	const pushResult = await executor.exec(["jj", "git", "push", "--all"]);
 	if (pushResult.code !== 0) {
-		console.error("❌ Failed to push bookmarks:", pushResult.stderr);
+		safeError("❌ Failed to push bookmarks:", pushResult.stderr);
 		Deno.exit(1);
 	}
 }
@@ -225,11 +230,11 @@ async function updateExistingPR(
 	const existingPR = pr.existingPR;
 	if (!existingPR) {
 		// This shouldn't happen as this function is only called when existingPR exists
-		console.error(`  ❌ No existing PR found for ${pr.bookmark}`);
+		safeError(`  ❌ No existing PR found for ${pr.bookmark}`);
 		return null;
 	}
 
-	console.log(
+	safeLog(
 		`[${prCount}/${totalPRs}] 🔄 Updating PR #${existingPR.number}: ${pr.bookmark} → ${pr.base}`,
 	);
 
@@ -239,10 +244,10 @@ async function updateExistingPR(
 				prNumber: existingPR.number,
 				base: pr.base,
 			});
-			console.log(`  📝 Updated base: ${existingPR.baseRefName} → ${pr.base}`);
+			safeLog(`  📝 Updated base: ${existingPR.baseRefName} → ${pr.base}`);
 		}
 
-		console.log(`  ✅ Updated PR #${existingPR.number}`);
+		safeLog(`  ✅ Updated PR #${existingPR.number}`);
 		return {
 			bookmark: pr.bookmark,
 			base: pr.base,
@@ -252,7 +257,7 @@ async function updateExistingPR(
 		};
 	}
 
-	console.log(`  ✅ Updated PR #${existingPR.number}`);
+	safeLog(`  ✅ Updated PR #${existingPR.number}`);
 	return null;
 }
 
@@ -264,7 +269,7 @@ async function createNewPR(
 	prManager: PullRequestManager,
 	isDraft: boolean,
 ): Promise<PRChainInfo | null> {
-	console.log(
+	safeLog(
 		`[${prCount}/${totalPRs}] 🆕 Creating PR: ${pr.bookmark} → ${pr.base}`,
 	);
 
@@ -278,7 +283,7 @@ async function createNewPR(
 		});
 
 		const status = isDraft ? "draft" : "ready for review";
-		console.log(`  ✅ Created PR #${prNumber} (${status})`);
+		safeLog(`  ✅ Created PR #${prNumber} (${status})`);
 
 		return {
 			bookmark: pr.bookmark,
@@ -289,7 +294,7 @@ async function createNewPR(
 		};
 	}
 
-	console.log(`  (dry-run: would create ${isDraft ? "draft" : "ready"} PR)`);
+	safeLog(`  (dry-run: would create ${isDraft ? "draft" : "ready"} PR)`);
 	return null;
 }
 
@@ -299,7 +304,7 @@ async function updatePRDescriptions(
 	descriptionGenerator: PRDescriptionGenerator,
 	prManager: PullRequestManager,
 ): Promise<void> {
-	console.log("📝 Updating PR descriptions...");
+	safeLog("📝 Updating PR descriptions...");
 
 	for (let i = 0; i < createdPRs.length; i++) {
 		const pr = createdPRs[i];
@@ -352,7 +357,7 @@ function showSummary(
 	createdPRs: PRChainInfo[],
 	existingPRs: Map<string, ExistingPR>,
 ): void {
-	console.log("\n✨ Stack PRs created with full chain visualization!");
+	safeLog("\n✨ Stack PRs created with full chain visualization!");
 
 	const createdCount = createdPRs.filter(
 		(pr) => !existingPRs.has(pr.bookmark),
@@ -363,17 +368,17 @@ function showSummary(
 	const readyCount = createdPRs.filter((pr) => pr.isReady).length;
 	const draftCount = createdPRs.filter((pr) => pr.isDraft).length;
 
-	console.log("\n📊 Summary:");
-	if (createdCount > 0) console.log(`  • Created: ${createdCount} new PR(s)`);
+	safeLog("\n📊 Summary:");
+	if (createdCount > 0) safeLog(`  • Created: ${createdCount} new PR(s)`);
 	if (updatedCount > 0)
-		console.log(`  • Updated: ${updatedCount} existing PR(s)`);
-	console.log(`  • Ready for review: ${readyCount}`);
-	console.log(`  • Drafts: ${draftCount}`);
+		safeLog(`  • Updated: ${updatedCount} existing PR(s)`);
+	safeLog(`  • Ready for review: ${readyCount}`);
+	safeLog(`  • Drafts: ${draftCount}`);
 
-	console.log("\nView your stack:");
-	console.log("  gh pr list --author @me --state open");
-	console.log("\nView in browser:");
-	console.log("  gh pr list --author @me --state open --web");
+	safeLog("\nView your stack:");
+	safeLog("  gh pr list --author @me --state open");
+	safeLog("\nView in browser:");
+	safeLog("  gh pr list --author @me --state open --web");
 }
 
 interface AppContext {
@@ -406,14 +411,14 @@ async function processStack(ctx: AppContext): Promise<void> {
 }
 
 async function detectAndValidateStack(ctx: AppContext): Promise<StackInfo> {
-	console.log("🔍 Detecting stack...");
+	safeLog("🔍 Detecting stack...");
 	
 	// Check for non-linear stacks (BUG-004)
 	await ensureLinearStack(ctx.executor);
 	
 	const stack = await detectStack(ctx.executor, ctx.options.baseBranch);
 	validateStackBookmarks(stack, ctx.options);
-	console.log(`📚 Found stack with ${stack.bookmarks.length} bookmark(s)`);
+	safeLog(`📚 Found stack with ${stack.bookmarks.length} bookmark(s)`);
 	return stack;
 }
 
@@ -423,21 +428,21 @@ async function ensureLinearStack(executor: CommandExecutor): Promise<void> {
 		return;
 	}
 
-	console.error(`❌ ${linearityCheck.message}`);
+	safeError(`❌ ${linearityCheck.message}`);
 	if (linearityCheck.problematicCommits.length > 0) {
-		console.error("  Problematic commits:");
+		safeError("  Problematic commits:");
 		for (const commit of linearityCheck.problematicCommits) {
-			console.error(`    - ${commit}`);
+			safeError(`    - ${commit}`);
 		}
 	}
-	console.error("\n⚠️  This tool only supports linear stacks!");
-	console.error("  Please resolve merge commits or divergent branches before using jj-stack-prs.");
-	console.error("  You can use 'jj rebase' to linearize your stack.");
+	safeError("\n⚠️  This tool only supports linear stacks!");
+	safeError("  Please resolve merge commits or divergent branches before using jj-stack-prs.");
+	safeError("  You can use 'jj rebase' to linearize your stack.");
 	Deno.exit(1);
 }
 
 async function processPRs(ctx: AppContext, stack: StackInfo): Promise<void> {
-	console.log("🔗 Building PR chain...");
+	safeLog("🔗 Building PR chain...");
 	const existingPRs = await ctx.prManager.findExistingPRs(stack.bookmarks);
 	const prChain = await ctx.prManager.buildPRChain(
 		stack.bookmarks,
@@ -491,17 +496,20 @@ async function finalizePRs(
 }
 
 function handleError(error: unknown, options: CLIOptions): void {
-	console.error(
+	safeError(
 		"❌ Error:",
 		error instanceof Error ? error.message : String(error),
 	);
 	if (options.dryRun) {
-		console.error("(This was a dry run - no changes were made)");
+		safeError("(This was a dry run - no changes were made)");
 	}
 	Deno.exit(1);
 }
 
 async function main() {
+	// Install handlers for broken pipe errors (BUG-001)
+	installBrokenPipeHandlers();
+	
 	const options = parseArguments(Deno.args);
 	await handleHelp(options);
 	handleValidationErrors(validateOptions(options));
@@ -513,12 +521,12 @@ async function main() {
 		const detectedBase = await detectBaseBranch(executor);
 		if (detectedBase) {
 			options.baseBranch = detectedBase;
-			console.log(`🔍 Auto-detected base branch: ${detectedBase}`);
+			safeLog(`🔍 Auto-detected base branch: ${detectedBase}`);
 		} else {
 			// Fall back to "master" if auto-detection fails
 			options.baseBranch = "master";
-			console.log("⚠️  Could not auto-detect base branch, using 'master'");
-			console.log("   Use --base <branch> to specify a different base branch");
+			safeLog("⚠️  Could not auto-detect base branch, using 'master'");
+			safeLog("   Use --base <branch> to specify a different base branch");
 		}
 	}
 	

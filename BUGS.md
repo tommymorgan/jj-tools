@@ -14,43 +14,6 @@ This document contains bugs and issues discovered during exploratory testing of 
 
 ## Bugs Found
 
-### 🐛 BUG-001: Broken Pipe Error on Large Output
-**Status**: 🔴 Open  
-**Severity**: Medium  
-**Category**: Output/Display  
-**Steps to Reproduce**:
-1. Create a stack with 5+ bookmarks
-2. Run `jj-stack-prs` or `jj-stack-prs --dry-run`
-3. Observe output after PR creation/update messages
-
-**Expected Behavior**:
-Full output should be displayed without errors
-
-**Actual Behavior**:
-"Broken pipe (os error 32)" error appears, truncating output
-
-**Error Output**:
-```
-[5/5] 🆕 Creating PR: auto/unbookmarked-change-uosynu → auto/add-settings-xvrxqs
-❌ Error: Broken pipe (os error 32)
-```
-
-**Impact**:
-- Output is truncated but operations complete successfully
-- Confusing error message that suggests failure when operations succeeded
-- Appears when piping through `head` or when terminal buffer is exceeded
-
-**Suggested Fix**:
-- Handle SIGPIPE gracefully
-- Catch broken pipe errors and continue silently
-- Consider paginating long output
-
----
-
-
-
-
-
 ### 🐛 BUG-006: No Validation for GitHub Authentication
 **Status**: 🔴 Open  
 **Severity**: Low  
@@ -138,7 +101,7 @@ Tool continues processing and may fail later with unclear errors
 (All high priority bugs have been resolved)
 
 ### Medium Priority Fixes
-1. Handle broken pipe errors (BUG-001)
+(All medium priority bugs have been resolved)
 
 ### Low Priority Fixes
 1. Add auth validation (BUG-006)
