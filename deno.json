@@ -4,12 +4,13 @@
 		"test:watch": "deno test --allow-run --allow-read --allow-write --allow-env --watch",
 		"run": "deno run --allow-run --allow-read --allow-write --allow-env src/main.ts",
 		"compile": "deno compile --allow-run --allow-read --allow-write --allow-env --output jj-stack-prs src/main.ts",
-		"lint": "npx @biomejs/biome lint .",
-		"lint:fix": "npx @biomejs/biome lint --fix .",
-		"format": "npx @biomejs/biome format --write .",
-		"format:check": "npx @biomejs/biome format .",
-		"check": "npx @biomejs/biome check .",
-		"check:fix": "npx @biomejs/biome check --fix ."
+		"typecheck": "deno check src/**/*.ts tests/**/*.ts",
+		"lint": "npx @biomejs/biome@latest lint .",
+		"lint:fix": "npx @biomejs/biome@latest lint --fix .",
+		"format": "npx @biomejs/biome@latest format --write .",
+		"format:check": "npx @biomejs/biome@latest format .",
+		"check": "npx @biomejs/biome@latest check .",
+		"check:fix": "npx @biomejs/biome@latest check --fix ."
 	},
 	"imports": {
 		"@std/testing": "https://deno.land/std@0.210.0/testing/mod.ts",

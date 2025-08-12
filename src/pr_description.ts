@@ -66,40 +66,52 @@ export class PRDescriptionGenerator {
 	extractOriginalBody(fullDescription: string): string {
 		if (!fullDescription) return "";
 
-		// Try to extract content between header metadata and chain visualization
 		const lines = fullDescription.split("\n");
-		const startMarkers = ["Stack position:", "Base:", "Depends on:"];
-		const endMarkers = ["---", "Full chain of PRs"];
+		const startIndex = this.findContentStart(lines);
 
-		let startIndex = -1;
-		let endIndex = lines.length;
-
-		// Find where metadata ends
-		for (let i = 0; i < lines.length; i++) {
-			const line = lines[i];
-			const isMetadata = startMarkers.some((marker) => line.startsWith(marker));
-
-			if (!isMetadata && startIndex === -1 && line.trim() !== "") {
-				startIndex = i;
-				break;
-			}
-		}
-
-		// Find where chain visualization starts
-		for (let i = startIndex; i < lines.length; i++) {
-			const line = lines[i];
-			if (endMarkers.some((marker) => line.includes(marker))) {
-				endIndex = i;
-				break;
-			}
-		}
-
-		// If no metadata found, return full description
 		if (startIndex === -1) {
 			return fullDescription;
 		}
 
-		// Extract the original body
+		const endIndex = this.findContentEnd(lines, startIndex);
+		const bodyLines = this.extractBodyLines(lines, startIndex, endIndex);
+
+		return bodyLines.join("\n");
+	}
+
+	private findContentStart(lines: string[]): number {
+		const startMarkers = ["Stack position:", "Base:", "Depends on:"];
+
+		for (let i = 0; i < lines.length; i++) {
+			const line = lines[i];
+			const isMetadata = startMarkers.some((marker) => line.startsWith(marker));
+
+			if (!isMetadata && line.trim() !== "") {
+				return i;
+			}
+		}
+
+		return -1;
+	}
+
+	private findContentEnd(lines: string[], startIndex: number): number {
+		const endMarkers = ["---", "Full chain of PRs"];
+
+		for (let i = startIndex; i < lines.length; i++) {
+			const line = lines[i];
+			if (endMarkers.some((marker) => line.includes(marker))) {
+				return i;
+			}
+		}
+
+		return lines.length;
+	}
+
+	private extractBodyLines(
+		lines: string[],
+		startIndex: number,
+		endIndex: number,
+	): string[] {
 		const bodyLines = lines.slice(startIndex, endIndex);
 
 		// Remove trailing empty lines
@@ -110,10 +122,10 @@ export class PRDescriptionGenerator {
 			bodyLines.pop();
 		}
 
-		return bodyLines.join("\n");
+		return bodyLines;
 	}
 
-	formatPRStatus(isDraft: boolean, isReady: boolean): string {
+	formatPRStatus(isDraft: boolean, _isReady: boolean): string {
 		if (isDraft) {
 			return "draft";
 		}

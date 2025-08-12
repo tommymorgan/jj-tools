@@ -20,7 +20,23 @@ export class AutoBookmarkManager {
 	constructor(private executor: CommandExecutor) {}
 
 	async findUnbookmarkedChanges(): Promise<UnbookmarkedChange[]> {
-		// Get log with change IDs and bookmarks for the full stack
+		const logOutput = await this.getChangeLog();
+		if (!logOutput) return [];
+
+		const unbookmarked: UnbookmarkedChange[] = [];
+		const lines = logOutput.split("\n");
+
+		for (const line of lines) {
+			const change = await this.processLogLine(line);
+			if (change) {
+				unbookmarked.push(change);
+			}
+		}
+
+		return unbookmarked;
+	}
+
+	private async getChangeLog(): Promise<string | null> {
 		const result = await this.executor.exec([
 			"jj",
 			"log",
@@ -31,48 +47,54 @@ export class AutoBookmarkManager {
 			'change_id ++ " " ++ bookmarks ++ "\\n"',
 		]);
 
-		if (result.code !== 0) {
-			return [];
+		return result.code === 0 ? result.stdout : null;
+	}
+
+	private async processLogLine(
+		line: string,
+	): Promise<UnbookmarkedChange | null> {
+		if (!line || line.startsWith("zzzzzzzz")) {
+			return null;
 		}
 
-		const unbookmarked: UnbookmarkedChange[] = [];
-		const lines = result.stdout.split("\n");
-
-		for (const line of lines) {
-			// Don't trim yet - we need to check if there's content after the space
-			if (!line) continue;
-
-			// Skip the root change (all z's)
-			if (line.startsWith("zzzzzzzz")) continue;
-
-			// The format is: "changeId bookmarks" where bookmarks may be empty
-			// If there's only a changeId followed by space(s), there are no bookmarks
-			const spaceIndex = line.indexOf(" ");
-			if (spaceIndex === -1) continue; // Shouldn't happen with our template
-
-			const changeId = line.substring(0, spaceIndex);
-			const bookmarksPart = line.substring(spaceIndex + 1).trim();
-
-			// If bookmarksPart is empty, there are no bookmarks
-			if (!bookmarksPart) {
-				// Get commit description for unbookmarked change
-				const descResult = await this.executor.exec([
-					"jj",
-					"show",
-					"-r",
-					changeId,
-					"--template",
-					"description",
-				]);
-
-				if (descResult.code === 0) {
-					const description = descResult.stdout.split("\n")[0].trim();
-					unbookmarked.push({ changeId, description });
-				}
-			}
+		const parsed = this.parseLogLine(line);
+		if (!parsed || parsed.hasBookmarks) {
+			return null;
 		}
 
-		return unbookmarked;
+		return await this.getChangeDescription(parsed.changeId);
+	}
+
+	private parseLogLine(
+		line: string,
+	): { changeId: string; hasBookmarks: boolean } | null {
+		const spaceIndex = line.indexOf(" ");
+		if (spaceIndex === -1) return null;
+
+		const changeId = line.substring(0, spaceIndex);
+		const bookmarksPart = line.substring(spaceIndex + 1).trim();
+
+		return { changeId, hasBookmarks: !!bookmarksPart };
+	}
+
+	private async getChangeDescription(
+		changeId: string,
+	): Promise<UnbookmarkedChange | null> {
+		const descResult = await this.executor.exec([
+			"jj",
+			"show",
+			"-r",
+			changeId,
+			"--template",
+			"description",
+		]);
+
+		if (descResult.code !== 0) {
+			return null;
+		}
+
+		const description = descResult.stdout.split("\n")[0].trim();
+		return { changeId, description };
 	}
 
 	generateBookmarkName(commitMessage: string, changeId: string): string {
@@ -158,33 +180,10 @@ export class AutoBookmarkManager {
 		const kept: string[] = [];
 
 		for (const bookmark of autoBookmarks) {
-			// Check PR status
-			const prResult = await this.executor.exec([
-				"gh",
-				"pr",
-				"view",
-				bookmark,
-				"--json",
-				"state",
-			]);
-
-			let shouldDelete = false;
-
-			if (prResult.code === 0) {
-				try {
-					const prInfo = JSON.parse(prResult.stdout);
-					shouldDelete = prInfo.state === "MERGED" || prInfo.state === "CLOSED";
-				} catch {
-					// If we can't parse, assume it should be deleted
-					shouldDelete = true;
-				}
-			} else {
-				// No PR found - delete orphaned auto bookmark
-				shouldDelete = true;
-			}
+			const shouldDelete = await this.shouldDeleteBookmark(bookmark);
 
 			if (shouldDelete) {
-				await this.executor.exec(["jj", "bookmark", "delete", bookmark]);
+				await this.deleteBookmark(bookmark);
 				deleted.push(bookmark);
 			} else {
 				kept.push(bookmark);
@@ -192,6 +191,37 @@ export class AutoBookmarkManager {
 		}
 
 		return { deleted, kept };
+	}
+
+	private async shouldDeleteBookmark(bookmark: string): Promise<boolean> {
+		const prState = await this.getPRState(bookmark);
+		return prState === null || prState === "MERGED" || prState === "CLOSED";
+	}
+
+	private async getPRState(bookmark: string): Promise<string | null> {
+		const prResult = await this.executor.exec([
+			"gh",
+			"pr",
+			"view",
+			bookmark,
+			"--json",
+			"state",
+		]);
+
+		if (prResult.code !== 0) {
+			return null; // No PR found
+		}
+
+		try {
+			const prInfo = JSON.parse(prResult.stdout);
+			return prInfo.state;
+		} catch {
+			return null; // Can't parse, treat as no PR
+		}
+	}
+
+	private async deleteBookmark(bookmark: string): Promise<void> {
+		await this.executor.exec(["jj", "bookmark", "delete", bookmark]);
 	}
 
 	async cleanupOrphanedAutoBookmarks(

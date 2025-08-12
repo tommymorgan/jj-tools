@@ -2,31 +2,41 @@ import { assertEquals } from "@std/assert";
 import { describe, it } from "@std/testing/bdd";
 import { type CommandExecutor, detectStack } from "../src/stack_detection.ts";
 
+// Helper function to create mock responses
+function createMockResponse(stdout: string, stderr = "", code = 0) {
+	return { stdout, stderr, code };
+}
+
+// Helper to create a mock executor
+function createMockExecutor(
+	logOutput: string,
+	showOutput = "feat: test",
+): CommandExecutor {
+	return {
+		exec: async (cmd: string[]) => {
+			const isLogCommand =
+				cmd.includes("log") && cmd.some((c) => c.includes("bookmarks"));
+			const isShowCommand = cmd.includes("show");
+
+			if (isLogCommand) {
+				return createMockResponse(logOutput);
+			}
+			if (isShowCommand) {
+				return createMockResponse(showOutput);
+			}
+			return createMockResponse("", "Unknown command", 1);
+		},
+	};
+}
+
 describe("Stack Detection - Full Stack", () => {
 	it("should detect all bookmarks in the stack, not just ancestors of current position", async () => {
 		// Arrange - simulating being in the middle of a stack
-		const mockExecutor: CommandExecutor = {
-			exec: async (cmd: string[]) => {
-				if (cmd.includes("log") && cmd.some((c) => c.includes("bookmarks"))) {
-					// Should get all bookmarks in the connected stack
-					return {
-						stdout: `auto/add-settings-xvrxqs
+		const logOutput = `auto/add-settings-xvrxqs
 auto/add-middleware-layer-pqyzym
-auto/add-user-profile-szqzyp`,
-						stderr: "",
-						code: 0,
-					};
-				}
-				if (cmd.includes("show")) {
-					return {
-						stdout: "feat: test",
-						stderr: "",
-						code: 0,
-					};
-				}
-				return { stdout: "", stderr: "Unknown command", code: 1 };
-			},
-		};
+auto/add-user-profile-szqzyp`;
+
+		const mockExecutor = createMockExecutor(logOutput);
 
 		// Act
 		const stack = await detectStack(mockExecutor);
@@ -40,26 +50,16 @@ auto/add-user-profile-szqzyp`,
 
 	it("should detect full stack even when positioned at the top", async () => {
 		// Arrange - at top of stack
-		const mockExecutor: CommandExecutor = {
-			exec: async (cmd: string[]) => {
-				if (cmd.includes("log") && cmd.some((c) => c.includes("bookmarks"))) {
-					// The revset should capture the entire connected stack
-					return {
-						stdout: `feature-top
+		const logOutput = `feature-top
 feature-middle  
-feature-bottom`,
-						stderr: "",
-						code: 0,
-					};
-				}
-				return { stdout: "", stderr: "Unknown command", code: 1 };
-			},
-		};
+feature-bottom`;
+
+		const mockExecutor = createMockExecutor(logOutput);
 
 		// Act
 		const stack = await detectStack(mockExecutor);
 
-		// Assert
+		// Assert - should still get all bookmarks
 		assertEquals(stack.bookmarks.length, 3);
 		assertEquals(stack.bookmarks[0].name, "feature-bottom");
 		assertEquals(stack.bookmarks[1].name, "feature-middle");

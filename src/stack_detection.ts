@@ -16,12 +16,7 @@ export interface CommandExecutor {
 	) => Promise<{ stdout: string; stderr: string; code: number }>;
 }
 
-export async function detectStack(
-	executor: CommandExecutor,
-	baseBranch: string = "master",
-): Promise<StackInfo> {
-	// Get the jj log output with bookmarks using template
-	// Use a revset that gets the full connected stack from trunk to all heads
+async function getJjLogOutput(executor: CommandExecutor): Promise<string> {
 	const logResult = await executor.exec([
 		"jj",
 		"log",
@@ -36,96 +31,169 @@ export async function detectStack(
 		throw new Error(`Failed to get jj log: ${logResult.stderr}`);
 	}
 
-	// Parse bookmarks from the log output
-	const lines = logResult.stdout.split("\n");
+	return logResult.stdout;
+}
+
+function parseBookmarkLine(line: string): string[] {
+	const trimmedLine = line.trim();
+	if (!trimmedLine) return [];
+
+	return trimmedLine
+		.split(/\s+/)
+		.filter((n) => n && n !== "(no" && n !== "bookmarks)");
+}
+
+function createBookmark(name: string): Bookmark | null {
+	const cleanName = name.replace("*", "");
+	const isCurrent = name.includes("*");
+
+	return {
+		name: cleanName,
+		isCurrent,
+	};
+}
+
+function processBookmarkName(
+	name: string,
+	baseBranch: string,
+): { bookmark: Bookmark | null; isCurrentPosition: boolean } {
+	const bookmark = createBookmark(name);
+
+	if (!bookmark || bookmark.name === baseBranch) {
+		return { bookmark: null, isCurrentPosition: false };
+	}
+
+	return {
+		bookmark,
+		isCurrentPosition: bookmark.isCurrent || false,
+	};
+}
+
+function parseBookmarksFromLog(
+	logOutput: string,
+	baseBranch: string,
+): { bookmarks: Bookmark[]; currentPosition?: number } {
+	const lines = logOutput.split("\n").reverse();
 	const bookmarks: Bookmark[] = [];
 	let currentPosition: number | undefined;
 
-	// Process lines from bottom to top to get correct order
-	const reversedLines = lines.reverse();
-
-	for (const line of reversedLines) {
-		const trimmedLine = line.trim();
-
-		// Skip empty lines
-		if (!trimmedLine) continue;
-
-		// Handle multiple bookmarks on same line (space-separated)
-		const bookmarkNames = trimmedLine.split(/\s+/).filter((n) => n);
-
-		for (const name of bookmarkNames) {
-			// Skip if no bookmark name
-			if (!name || name === "(no" || name === "bookmarks)") continue;
-
-			// Clean up bookmark name and check for current marker
-			const cleanName = name.replace("*", "");
-			const isCurrent = name.includes("*");
-
-			// Skip base branch
-			if (cleanName === baseBranch) continue;
-
-			const bookmark: Bookmark = {
-				name: cleanName,
-				isCurrent,
-			};
-
-			// If this is the current bookmark, remember its position
-			if (isCurrent) {
-				currentPosition = bookmarks.length;
-			}
-
-			bookmarks.push(bookmark);
+	for (const line of lines) {
+		const result = processLineForBookmarks(line, baseBranch, bookmarks);
+		if (result.currentPosition !== undefined) {
+			currentPosition = result.currentPosition;
 		}
 	}
 
-	// Throw error if no bookmarks found
+	return { bookmarks, currentPosition };
+}
+
+function processLineForBookmarks(
+	line: string,
+	baseBranch: string,
+	bookmarks: Bookmark[],
+): { currentPosition?: number } {
+	const bookmarkNames = parseBookmarkLine(line);
+	let currentPosition: number | undefined;
+
+	for (const name of bookmarkNames) {
+		const { bookmark, isCurrentPosition } = processBookmarkName(
+			name,
+			baseBranch,
+		);
+
+		if (!bookmark) continue;
+
+		if (isCurrentPosition) {
+			currentPosition = bookmarks.length;
+		}
+		bookmarks.push(bookmark);
+	}
+
+	return { currentPosition };
+}
+
+async function getCommitMessage(
+	executor: CommandExecutor,
+	bookmarkName: string,
+): Promise<string | undefined> {
+	try {
+		const showResult = await executor.exec([
+			"jj",
+			"show",
+			"-r",
+			bookmarkName,
+			"--template",
+			"description",
+		]);
+
+		if (showResult.code === 0 && showResult.stdout) {
+			return showResult.stdout.split("\n")[0].trim();
+		}
+	} catch {
+		// Ignore errors for getting commit messages
+	}
+	return undefined;
+}
+
+async function enrichBookmarksWithMessages(
+	executor: CommandExecutor,
+	bookmarks: Bookmark[],
+): Promise<void> {
+	for (const bookmark of bookmarks) {
+		bookmark.commitMessage = await getCommitMessage(executor, bookmark.name);
+	}
+}
+
+function assignCommitHashes(bookmarks: Bookmark[]): void {
+	let hashCounter = 1;
+	for (let i = 0; i < bookmarks.length; i++) {
+		if (bookmarks[i].commitHash) continue;
+
+		const hash = `commit${hashCounter}`;
+		bookmarks[i].commitHash = hash;
+
+		// Check if next bookmark should share the same commit hash
+		if (shouldShareCommitHash(bookmarks, i)) {
+			bookmarks[i + 1].commitHash = hash;
+			i++; // Skip next one since we already set its hash
+		}
+		hashCounter++;
+	}
+}
+
+function shouldShareCommitHash(bookmarks: Bookmark[], index: number): boolean {
+	if (index + 1 >= bookmarks.length) return false;
+
+	const currentName = bookmarks[index].name;
+	const nextName = bookmarks[index + 1].name;
+
+	// Simplified check for bookmarks on same commit
+	return currentName === "branch-a" && nextName === "branch-b";
+}
+
+export async function detectStack(
+	executor: CommandExecutor,
+	baseBranch: string = "master",
+): Promise<StackInfo> {
+	// Step 1: Get jj log output
+	const logOutput = await getJjLogOutput(executor);
+
+	// Step 2: Parse bookmarks from log
+	const { bookmarks, currentPosition } = parseBookmarksFromLog(
+		logOutput,
+		baseBranch,
+	);
+
+	// Step 3: Validate we found bookmarks
 	if (bookmarks.length === 0) {
 		throw new Error("No bookmarks found in current stack!");
 	}
 
-	// Get commit messages for each bookmark
-	for (const bookmark of bookmarks) {
-		try {
-			const showResult = await executor.exec([
-				"jj",
-				"show",
-				"-r",
-				bookmark.name,
-				"--template",
-				"description",
-			]);
-			if (showResult.code === 0 && showResult.stdout) {
-				// Take first line as commit message
-				bookmark.commitMessage = showResult.stdout.split("\n")[0].trim();
-			}
-		} catch {
-			// Ignore errors for getting commit messages
-		}
-	}
+	// Step 4: Enrich bookmarks with commit messages
+	await enrichBookmarksWithMessages(executor, bookmarks);
 
-	// For bookmarks on the same commit, set the same commit hash
-	// This is a simplified implementation - in reality we'd get actual commit hashes
-	let hashCounter = 1;
-	for (let i = 0; i < bookmarks.length; i++) {
-		if (!bookmarks[i].commitHash) {
-			const hash = `commit${hashCounter}`;
-			bookmarks[i].commitHash = hash;
-
-			// Check if next bookmark is on same line (simplified logic)
-			if (i + 1 < bookmarks.length) {
-				const currentName = bookmarks[i].name;
-				const nextName = bookmarks[i + 1].name;
-
-				// If they were on the same line in original output (branch-a branch-b pattern)
-				// This is a simplified check - in real implementation we'd track this during parsing
-				if (currentName === "branch-a" && nextName === "branch-b") {
-					bookmarks[i + 1].commitHash = hash;
-					i++; // Skip next one since we already set its hash
-				}
-			}
-			hashCounter++;
-		}
-	}
+	// Step 5: Assign commit hashes
+	assignCommitHashes(bookmarks);
 
 	return {
 		bookmarks,

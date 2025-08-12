@@ -3,7 +3,6 @@ import { describe, it } from "@std/testing/bdd";
 import {
 	type CreatePROptions,
 	type ExistingPR,
-	PRInfo,
 	PullRequestManager,
 	type UpdatePROptions,
 } from "../src/pr_manager.ts";

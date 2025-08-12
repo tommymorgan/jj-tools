@@ -1,62 +1,131 @@
-import { assertEquals, assertExists } from "@std/assert";
+import { assertEquals } from "@std/assert";
 import { describe, it } from "@std/testing/bdd";
 import {
-	AutoBookmark,
 	AutoBookmarkManager,
-	CleanupResult,
 	type UnbookmarkedChange,
 } from "../src/auto_bookmark.ts";
 import type { CommandExecutor } from "../src/stack_detection.ts";
+
+// Helper function to create mock responses
+function createMockResponse(stdout: string, stderr = "", code = 0) {
+	return { stdout, stderr, code };
+}
+
+// Helper function to handle jj log commands
+function handleLogCommand(cmd: string[], logOutput: string) {
+	if (cmd.includes("log") && cmd.some((c) => c.includes("change_id"))) {
+		return createMockResponse(logOutput);
+	}
+	return null;
+}
+
+// Helper function to handle jj show commands with change ID mapping
+function handleShowCommand(
+	cmd: string[],
+	changeIdToMessageMap: Record<string, string>,
+) {
+	if (!cmd.includes("show")) {
+		return null;
+	}
+
+	for (const [changeId, message] of Object.entries(changeIdToMessageMap)) {
+		if (cmd.includes(changeId)) {
+			return createMockResponse(message);
+		}
+	}
+
+	return null;
+}
+
+// Helper function to handle jj bookmark list commands
+function handleBookmarkListCommand(cmd: string[], bookmarkOutput: string) {
+	if (cmd.includes("bookmark") && cmd.includes("list")) {
+		return createMockResponse(bookmarkOutput);
+	}
+	return null;
+}
+
+// Helper function to handle jj pr view commands with state mapping
+function handlePrViewCommand(
+	cmd: string[],
+	bookmarkToStateMap: Record<string, string>,
+) {
+	if (!cmd.includes("pr") || !cmd.includes("view")) {
+		return null;
+	}
+
+	for (const [bookmark, state] of Object.entries(bookmarkToStateMap)) {
+		if (cmd.includes(bookmark)) {
+			return createMockResponse(JSON.stringify({ state }));
+		}
+	}
+
+	// Default: no PR found
+	return createMockResponse("", "no pull requests found", 1);
+}
+
+// Helper function to handle jj bookmark delete commands
+function handleBookmarkDeleteCommand(
+	cmd: string[],
+	deletedBookmarks: string[],
+) {
+	if (cmd.includes("bookmark") && cmd.includes("delete")) {
+		const bookmarkName = cmd[cmd.indexOf("delete") + 1];
+		deletedBookmarks.push(bookmarkName);
+		return createMockResponse("");
+	}
+	return null;
+}
+
+// Helper function to create mock executor for findUnbookmarkedChanges tests
+function createFindUnbookmarkedMockExecutor(
+	logOutput: string,
+	showMap: Record<string, string>,
+): CommandExecutor {
+	return {
+		exec: async (cmd: string[]) => {
+			return (
+				handleLogCommand(cmd, logOutput) ||
+				handleShowCommand(cmd, showMap) ||
+				createMockResponse("", "Unknown command", 1)
+			);
+		},
+	};
+}
+
+// Helper function to create mock executor for cleanup tests
+function createCleanupMockExecutor(
+	prStateMap: Record<string, string>,
+	deletedBookmarks: string[],
+): CommandExecutor {
+	return {
+		exec: async (cmd: string[]) => {
+			return (
+				handlePrViewCommand(cmd, prStateMap) ||
+				handleBookmarkDeleteCommand(cmd, deletedBookmarks) ||
+				createMockResponse("", "Unknown command", 1)
+			);
+		},
+	};
+}
 
 describe("Auto Bookmark Manager", () => {
 	describe("findUnbookmarkedChanges", () => {
 		it("should detect unbookmarked changes when no bookmarks present", async () => {
 			// Arrange - simulating actual jj output format
-			const mockExecutor: CommandExecutor = {
-				exec: async (cmd: string[]) => {
-					if (cmd.includes("log") && cmd.some((c) => c.includes("change_id"))) {
-						// Empty space after change ID means no bookmarks
-						return {
-							stdout: `xvrxqsnrzpnkpwxsvtwskyrzrxvvryox 
+			const logOutput = `xvrxqsnrzpnkpwxsvtwskyrzrxvvryox 
 szqzyprqmrlwvkrpmvppxsutusrvpprl 
-qvmssloumqwzpwuuzvntslprwpnxmuwp `,
-							stderr: "",
-							code: 0,
-						};
-					}
-					if (
-						cmd.includes("show") &&
-						cmd.includes("xvrxqsnrzpnkpwxsvtwskyrzrxvvryox")
-					) {
-						return {
-							stdout: "feat: add settings",
-							stderr: "",
-							code: 0,
-						};
-					}
-					if (
-						cmd.includes("show") &&
-						cmd.includes("szqzyprqmrlwvkrpmvppxsutusrvpprl")
-					) {
-						return {
-							stdout: "feat: add user profile",
-							stderr: "",
-							code: 0,
-						};
-					}
-					if (
-						cmd.includes("show") &&
-						cmd.includes("qvmssloumqwzpwuuzvntslprwpnxmuwp")
-					) {
-						return {
-							stdout: "feat: add authentication",
-							stderr: "",
-							code: 0,
-						};
-					}
-					return { stdout: "", stderr: "Unknown command", code: 1 };
-				},
+qvmssloumqwzpwuuzvntslprwpnxmuwp `;
+			const showMap = {
+				xvrxqsnrzpnkpwxsvtwskyrzrxvvryox: "feat: add settings",
+				szqzyprqmrlwvkrpmvppxsutusrvpprl: "feat: add user profile",
+				qvmssloumqwzpwuuzvntslprwpnxmuwp: "feat: add authentication",
 			};
+
+			const mockExecutor = createFindUnbookmarkedMockExecutor(
+				logOutput,
+				showMap,
+			);
 
 			const manager = new AutoBookmarkManager(mockExecutor);
 
@@ -84,30 +153,17 @@ qvmssloumqwzpwuuzvntslprwpnxmuwp `,
 
 		it("should skip changes that have bookmarks", async () => {
 			// Arrange
-			const mockExecutor: CommandExecutor = {
-				exec: async (cmd: string[]) => {
-					if (cmd.includes("log") && cmd.some((c) => c.includes("change_id"))) {
-						return {
-							stdout: `xvrxqsnrzpnkpwxsvtwskyrzrxvvryox feature-settings
+			const logOutput = `xvrxqsnrzpnkpwxsvtwskyrzrxvvryox feature-settings
 szqzyprqmrlwvkrpmvppxsutusrvpprl 
-qvmssloumqwzpwuuzvntslprwpnxmuwp feature-auth`,
-							stderr: "",
-							code: 0,
-						};
-					}
-					if (
-						cmd.includes("show") &&
-						cmd.includes("szqzyprqmrlwvkrpmvppxsutusrvpprl")
-					) {
-						return {
-							stdout: "feat: add user profile",
-							stderr: "",
-							code: 0,
-						};
-					}
-					return { stdout: "", stderr: "Unknown command", code: 1 };
-				},
+qvmssloumqwzpwuuzvntslprwpnxmuwp feature-auth`;
+			const showMap = {
+				szqzyprqmrlwvkrpmvppxsutusrvpprl: "feat: add user profile",
 			};
+
+			const mockExecutor = createFindUnbookmarkedMockExecutor(
+				logOutput,
+				showMap,
+			);
 
 			const manager = new AutoBookmarkManager(mockExecutor);
 
@@ -125,26 +181,16 @@ qvmssloumqwzpwuuzvntslprwpnxmuwp feature-auth`,
 
 		it("should skip the root change (all z's)", async () => {
 			// Arrange
-			const mockExecutor: CommandExecutor = {
-				exec: async (cmd: string[]) => {
-					if (cmd.includes("log") && cmd.some((c) => c.includes("change_id"))) {
-						return {
-							stdout: `abc123 
-zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz `,
-							stderr: "",
-							code: 0,
-						};
-					}
-					if (cmd.includes("show") && cmd.includes("abc123")) {
-						return {
-							stdout: "feat: some feature",
-							stderr: "",
-							code: 0,
-						};
-					}
-					return { stdout: "", stderr: "Unknown command", code: 1 };
-				},
+			const logOutput = `abc123 
+zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz `;
+			const showMap = {
+				abc123: "feat: some feature",
 			};
+
+			const mockExecutor = createFindUnbookmarkedMockExecutor(
+				logOutput,
+				showMap,
+			);
 
 			const manager = new AutoBookmarkManager(mockExecutor);
 
@@ -158,19 +204,10 @@ zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz `,
 
 		it("should return empty array when all changes have bookmarks", async () => {
 			// Arrange
-			const mockExecutor: CommandExecutor = {
-				exec: async (cmd: string[]) => {
-					if (cmd.includes("log")) {
-						return {
-							stdout: `abc123 feature-1
-def456 feature-2`,
-							stderr: "",
-							code: 0,
-						};
-					}
-					return { stdout: "", stderr: "Unknown command", code: 1 };
-				},
-			};
+			const logOutput = `abc123 feature-1
+def456 feature-2`;
+
+			const mockExecutor = createFindUnbookmarkedMockExecutor(logOutput, {});
 
 			const manager = new AutoBookmarkManager(mockExecutor);
 
@@ -291,22 +328,20 @@ def456 feature-2`,
 	describe("findAutoBookmarks", () => {
 		it("should list all auto/* bookmarks", async () => {
 			// Arrange
-			const mockExecutor: CommandExecutor = {
-				exec: async (cmd: string[]) => {
-					if (cmd.includes("bookmark") && cmd.includes("list")) {
-						return {
-							stdout: `
+			const bookmarkOutput = `
                 auto/feature-abc123
                 feature-1
                 auto/fix-bug-def456
                 master
                 auto/update-deps-ghi789
-              `,
-							stderr: "",
-							code: 0,
-						};
-					}
-					return { stdout: "", stderr: "Unknown command", code: 1 };
+              `;
+
+			const mockExecutor: CommandExecutor = {
+				exec: async (cmd: string[]) => {
+					return (
+						handleBookmarkListCommand(cmd, bookmarkOutput) ||
+						createMockResponse("", "Unknown command", 1)
+					);
 				},
 			};
 
@@ -324,20 +359,18 @@ def456 feature-2`,
 
 		it("should return empty array when no auto bookmarks exist", async () => {
 			// Arrange
-			const mockExecutor: CommandExecutor = {
-				exec: async (cmd: string[]) => {
-					if (cmd.includes("bookmark") && cmd.includes("list")) {
-						return {
-							stdout: `
+			const bookmarkOutput = `
                 feature-1
                 feature-2
                 master
-              `,
-							stderr: "",
-							code: 0,
-						};
-					}
-					return { stdout: "", stderr: "Unknown command", code: 1 };
+              `;
+
+			const mockExecutor: CommandExecutor = {
+				exec: async (cmd: string[]) => {
+					return (
+						handleBookmarkListCommand(cmd, bookmarkOutput) ||
+						createMockResponse("", "Unknown command", 1)
+					);
 				},
 			};
 
@@ -352,19 +385,17 @@ def456 feature-2`,
 
 		it("should extract bookmark names from jj bookmark list output with commit info", async () => {
 			// Arrange - simulating real jj bookmark list output
-			const mockExecutor: CommandExecutor = {
-				exec: async (cmd: string[]) => {
-					if (cmd.includes("bookmark") && cmd.includes("list")) {
-						return {
-							stdout: `auto/add-settings-xvrxqs: xvrxqsnr da0c8c10 feat: add settings
+			const bookmarkOutput = `auto/add-settings-xvrxqs: xvrxqsnr da0c8c10 feat: add settings
 auto/add-middleware-layer-pqyzym: pqyzymlo 10e7c205 feat: add middleware layer
 master: mzmwrosu 606382ed Initial commit
-auto/add-user-profile-szqzyp: szqzyprq bd5c84f0 feat: add user profile`,
-							stderr: "",
-							code: 0,
-						};
-					}
-					return { stdout: "", stderr: "Unknown command", code: 1 };
+auto/add-user-profile-szqzyp: szqzyprq bd5c84f0 feat: add user profile`;
+
+			const mockExecutor: CommandExecutor = {
+				exec: async (cmd: string[]) => {
+					return (
+						handleBookmarkListCommand(cmd, bookmarkOutput) ||
+						createMockResponse("", "Unknown command", 1)
+					);
 				},
 			};
 
@@ -394,49 +425,16 @@ auto/add-user-profile-szqzyp: szqzyprq bd5c84f0 feat: add user profile`,
 		it("should delete auto bookmarks for merged PRs", async () => {
 			// Arrange
 			const deletedBookmarks: string[] = [];
-			const mockExecutor: CommandExecutor = {
-				exec: async (cmd: string[]) => {
-					if (
-						cmd.includes("pr") &&
-						cmd.includes("view") &&
-						cmd.includes("auto/feature-abc123")
-					) {
-						return {
-							stdout: JSON.stringify({ state: "MERGED" }),
-							stderr: "",
-							code: 0,
-						};
-					}
-					if (
-						cmd.includes("pr") &&
-						cmd.includes("view") &&
-						cmd.includes("auto/fix-bug-def456")
-					) {
-						return {
-							stdout: JSON.stringify({ state: "CLOSED" }),
-							stderr: "",
-							code: 0,
-						};
-					}
-					if (
-						cmd.includes("pr") &&
-						cmd.includes("view") &&
-						cmd.includes("auto/update-deps-ghi789")
-					) {
-						return {
-							stdout: JSON.stringify({ state: "OPEN" }),
-							stderr: "",
-							code: 0,
-						};
-					}
-					if (cmd.includes("bookmark") && cmd.includes("delete")) {
-						const bookmarkName = cmd[cmd.indexOf("delete") + 1];
-						deletedBookmarks.push(bookmarkName);
-						return { stdout: "", stderr: "", code: 0 };
-					}
-					return { stdout: "", stderr: "Unknown command", code: 1 };
-				},
+			const prStateMap = {
+				"auto/feature-abc123": "MERGED",
+				"auto/fix-bug-def456": "CLOSED",
+				"auto/update-deps-ghi789": "OPEN",
 			};
+
+			const mockExecutor = createCleanupMockExecutor(
+				prStateMap,
+				deletedBookmarks,
+			);
 
 			const manager = new AutoBookmarkManager(mockExecutor);
 			const autoBookmarks = [
@@ -460,20 +458,8 @@ auto/add-user-profile-szqzyp: szqzyprq bd5c84f0 feat: add user profile`,
 		it("should handle bookmarks without PRs", async () => {
 			// Arrange
 			const deletedBookmarks: string[] = [];
-			const mockExecutor: CommandExecutor = {
-				exec: async (cmd: string[]) => {
-					if (cmd.includes("pr") && cmd.includes("view")) {
-						// Simulate no PR found
-						return { stdout: "", stderr: "no pull requests found", code: 1 };
-					}
-					if (cmd.includes("bookmark") && cmd.includes("delete")) {
-						const bookmarkName = cmd[cmd.indexOf("delete") + 1];
-						deletedBookmarks.push(bookmarkName);
-						return { stdout: "", stderr: "", code: 0 };
-					}
-					return { stdout: "", stderr: "Unknown command", code: 1 };
-				},
-			};
+			// Empty prStateMap means no PRs found
+			const mockExecutor = createCleanupMockExecutor({}, deletedBookmarks);
 
 			const manager = new AutoBookmarkManager(mockExecutor);
 			const autoBookmarks = ["auto/orphaned-abc123"];
@@ -493,16 +479,8 @@ auto/add-user-profile-szqzyp: szqzyprq bd5c84f0 feat: add user profile`,
 		it("should delete auto bookmarks not in current stack", async () => {
 			// Arrange
 			const deletedBookmarks: string[] = [];
-			const mockExecutor: CommandExecutor = {
-				exec: async (cmd: string[]) => {
-					if (cmd.includes("bookmark") && cmd.includes("delete")) {
-						const bookmarkName = cmd[cmd.indexOf("delete") + 1];
-						deletedBookmarks.push(bookmarkName);
-						return { stdout: "", stderr: "", code: 0 };
-					}
-					return { stdout: "", stderr: "Unknown command", code: 1 };
-				},
-			};
+			// Only needs bookmark delete functionality
+			const mockExecutor = createCleanupMockExecutor({}, deletedBookmarks);
 
 			const manager = new AutoBookmarkManager(mockExecutor);
 			const autoBookmarks = [
