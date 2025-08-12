@@ -16,7 +16,7 @@ let versionFileContent = await Deno.readTextFile(versionFilePath);
 // Update the VERSION constant
 versionFileContent = versionFileContent.replace(
 	/const VERSION = "[^"]*";/,
-	`const VERSION = "${version}";`
+	`const VERSION = "${version}";`,
 );
 
 // Write back the updated content
@@ -34,7 +34,7 @@ const cmd = new Deno.Command("deno", {
 		"--allow-env",
 		"--output",
 		"jj-stack-prs",
-		"src/main.ts"
+		"src/main.ts",
 	],
 	stdout: "inherit",
 	stderr: "inherit",

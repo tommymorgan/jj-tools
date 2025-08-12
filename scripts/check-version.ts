@@ -18,11 +18,11 @@ function detectChangeLevel(curr: SemVer, prev: SemVer): string {
 function getVersionChangeType(current: string, previous: string): string {
 	const curr = parseSemver(current);
 	const prev = parseSemver(previous);
-	
+
 	const comparison = compare(curr, prev);
 	if (comparison === 0) return "unchanged";
 	if (comparison < 0) return "backwards";
-	
+
 	return detectChangeLevel(curr, prev);
 }
 
