@@ -9,7 +9,6 @@ import {
 	showHelp,
 	validateOptions,
 } from "./cli.ts";
-import { showVersion } from "./version.ts";
 import { checkStackLinearity } from "./linearity_checker.ts";
 import { type PRChainInfo, PRDescriptionGenerator } from "./pr_description.ts";
 import {
@@ -25,8 +24,10 @@ import {
 import {
 	type CommandExecutor,
 	detectStack,
+	hasConflicts,
 	type StackInfo,
 } from "./stack_detection.ts";
+import { showVersion } from "./version.ts";
 
 // Real command executor that runs system commands
 class SystemCommandExecutor implements CommandExecutor {
@@ -406,10 +407,13 @@ async function processStack(ctx: AppContext): Promise<void> {
 	// Step 3: Detect and validate stack
 	const stack = await detectAndValidateStack(ctx);
 
-	// Step 4: Push bookmarks to GitHub
+	// Step 4: Check for conflicts before attempting to push
+	await checkForConflicts(ctx);
+
+	// Step 5: Push bookmarks to GitHub
 	await pushBookmarksToGitHub(ctx.options, ctx.executor);
 
-	// Step 5: Process PRs
+	// Step 6: Process PRs
 	await processPRs(ctx, stack);
 }
 
@@ -443,6 +447,34 @@ async function ensureLinearStack(executor: CommandExecutor): Promise<void> {
 		"  Please resolve merge commits or divergent branches before using jj-stack-prs.",
 	);
 	safeError("  You can use 'jj rebase' to linearize your stack.");
+	Deno.exit(1);
+}
+
+async function checkForConflicts(ctx: AppContext): Promise<void> {
+	safeLog("🔍 Checking for conflicts...");
+
+	const conflictCheck = await hasConflicts(
+		ctx.executor,
+		ctx.options.baseBranch,
+	);
+
+	if (!conflictCheck.hasConflicts) {
+		return;
+	}
+
+	safeError("❌ Cannot create PRs: Found conflicts in the stack");
+	safeError("\n  Conflicted commits:");
+	for (const conflict of conflictCheck.conflictedCommits) {
+		safeError(
+			`    - ${conflict.changeId} (${conflict.bookmark}): ${conflict.description}`,
+		);
+	}
+	safeError("\n⚠️  Jujutsu cannot push commits with conflicts to GitHub.");
+	safeError("  Please resolve the conflicts before running jj-stack-prs.");
+	safeError("\n  To resolve conflicts:");
+	safeError("    1. Edit the conflicted commit: jj edit <change-id>");
+	safeError("    2. Resolve the conflicts in the affected files");
+	safeError("    3. Mark as resolved: jj squash or jj diffedit");
 	Deno.exit(1);
 }
 

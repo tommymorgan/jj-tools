@@ -107,3 +107,4 @@ Tests are organized by module in the `tests/` directory. The project uses Deno's
 - Auto-bookmarks use the `auto/` prefix - avoid creating manual bookmarks with this prefix
 - The tool pushes all bookmarks to GitHub before creating PRs
 - Always run `deno task verify` before creating a new jj change.
+- Do not use jj bookmarks as feature branches.  This repo uses pure trunk-based development.  When pushing to GitHub push main.

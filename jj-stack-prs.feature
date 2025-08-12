@@ -102,6 +102,31 @@ Feature: jj-stack-prs - Create GitHub PRs from Jujutsu stack
     And a warning should be shown for the failed PR
     And the chain visualization should still include the failed branch
 
+  Scenario: Detect and handle conflicts early
+    Given I have a stack with 3 bookmarks:
+      | bookmark_name | commit_state | description                    |
+      | feature-1     | clean        | feat: add authentication       |
+      | feature-2     | conflicted   | feat: add user profiles        |
+      | feature-3     | clean        | feat: add user settings        |
+    When I run "jj-stack-prs"
+    Then the command should exit with code 1 before attempting to push
+    And the error message should clearly identify the conflicted commits:
+      """
+      ❌ Cannot create PRs: Found conflicts in the stack
+      
+        Conflicted commits:
+          - def456 (feature-2): (conflict) feat: add user profiles
+      
+      ⚠️  Jujutsu cannot push commits with conflicts to GitHub.
+        Please resolve the conflicts before running jj-stack-prs.
+      
+        To resolve conflicts:
+          1. Edit the conflicted commit: jj edit <change-id>
+          2. Resolve the conflicts in the affected files
+          3. Mark as resolved: jj squash or jj diffedit
+      """
+    And no push or PR creation should be attempted
+
   Scenario: Detect stack from middle position
     Given I am currently positioned in the middle of a stack
     And there are bookmarks both above and below my position:
@@ -140,6 +165,7 @@ Feature: jj-stack-prs - Create GitHub PRs from Jujutsu stack
       | stage                | message_pattern                        |
       | Detection           | "🔍 Detecting stack..."                |
       | Stack found         | "📚 Found stack with 4 bookmarks"      |
+      | Conflict check      | "🔍 Checking for conflicts..."         |
       | Pushing             | "🚀 Pushing bookmarks to GitHub..."    |
       | Chain building      | "🔗 Building PR chain..."              |
       | PR creation         | "[X/4] Creating PR: branch → base"     |

@@ -3,7 +3,7 @@
  */
 
 // This will be set at compile time from deno.json
-const VERSION = "0.1.0";
+const VERSION = "0.1.7";
 
 export async function getVersion(): Promise<string> {
 	return VERSION;

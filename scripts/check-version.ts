@@ -6,7 +6,7 @@
  */
 
 import { parse as parseFlags } from "@std/flags";
-import { parse as parseSemver, compare, type SemVer } from "@std/semver";
+import { compare, parse as parseSemver, type SemVer } from "@std/semver";
 
 function detectChangeLevel(curr: SemVer, prev: SemVer): string {
 	if (curr.major > prev.major) return "major";

@@ -68,7 +68,6 @@ This document contains bugs and issues discovered during exploratory testing of 
 - ⏳ Integration with CI/CD systems
 - ⏳ Different git remote configurations
 - ⏳ Bookmarks with unicode characters
-- ⏳ Stacks with conflicts
 
 ## Recommendations
 

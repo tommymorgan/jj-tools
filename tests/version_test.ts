@@ -8,8 +8,8 @@ describe("Version utilities", () => {
 			// Act
 			const version = await getVersion();
 
-			// Assert - we know it's 0.1.0 from deno.json
-			assertEquals(version, "0.1.0");
+			// Assert - we know it's 0.1.7 from deno.json
+			assertEquals(version, "0.1.7");
 		});
 
 		it("should cache version after first read", async () => {
@@ -19,7 +19,7 @@ describe("Version utilities", () => {
 
 			// Assert - should return same value
 			assertEquals(version1, version2);
-			assertEquals(version1, "0.1.0");
+			assertEquals(version1, "0.1.7");
 		});
 	});
 
@@ -29,7 +29,7 @@ describe("Version utilities", () => {
 			const versionString = await showVersion();
 
 			// Assert
-			assertEquals(versionString, "jj-stack-prs version 0.1.0");
+			assertEquals(versionString, "jj-stack-prs version 0.1.7");
 		});
 	});
 });

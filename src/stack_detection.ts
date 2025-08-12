@@ -205,3 +205,104 @@ export async function detectStack(
 		currentPosition,
 	};
 }
+
+export interface ConflictedCommit {
+	changeId: string;
+	bookmark: string;
+	description: string;
+}
+
+export interface ConflictCheckResult {
+	hasConflicts: boolean;
+	conflictedCommits: ConflictedCommit[];
+}
+
+function parseConflictedCommit(line: string): ConflictedCommit | null {
+	// Format: changeId email date bookmark* commitHash description
+	// The description may contain "conflict" or "(conflict)"
+	const parts = line.split(/\s+/);
+	if (parts.length < 5) {
+		return null;
+	}
+
+	const changeId = parts[0];
+	const bookmarkInfo = findBookmarkInParts(parts);
+
+	if (!bookmarkInfo) {
+		return null;
+	}
+
+	// Description is everything after the commit hash
+	const descriptionParts = parts.slice(bookmarkInfo.index + 2);
+	const description = descriptionParts.join(" ");
+
+	return {
+		changeId,
+		bookmark: bookmarkInfo.bookmark,
+		description,
+	};
+}
+
+function findBookmarkInParts(
+	parts: string[],
+): { bookmark: string; index: number } | null {
+	// Find the bookmark (may have * suffix)
+	// It appears after date/time and before the commit hash
+	for (let i = 3; i < parts.length - 1; i++) {
+		// Look for a part that looks like a bookmark (before the commit hash)
+		if (/^[a-f0-9]{8}/.test(parts[i + 1])) {
+			return {
+				bookmark: parts[i].replace("*", ""),
+				index: i,
+			};
+		}
+	}
+	return null;
+}
+
+function isConflictedLine(line: string): boolean {
+	return line.includes(" conflict") || line.includes("(conflict)");
+}
+
+async function getConflictLog(
+	executor: CommandExecutor,
+	baseBranch: string,
+): Promise<string> {
+	const logResult = await executor.exec([
+		"jj",
+		"log",
+		"--no-graph",
+		"--template",
+		"builtin_log_oneline",
+		"-r",
+		`::@ ~ ::${baseBranch}`,
+	]);
+
+	if (logResult.code !== 0) {
+		throw new Error(`Failed to check for conflicts: ${logResult.stderr}`);
+	}
+
+	return logResult.stdout;
+}
+
+function extractConflictedCommits(logOutput: string): ConflictedCommit[] {
+	const lines = logOutput.split("\n").filter((line) => line.trim());
+
+	return lines
+		.filter(isConflictedLine)
+		.map(parseConflictedCommit)
+		.filter((commit): commit is ConflictedCommit => commit !== null);
+}
+
+export async function hasConflicts(
+	executor: CommandExecutor,
+	baseBranch: string = "master",
+): Promise<ConflictCheckResult> {
+	const logOutput = await getConflictLog(executor, baseBranch);
+	const conflictedCommits = extractConflictedCommits(logOutput);
+
+	return {
+		hasConflicts: conflictedCommits.length > 0,
+		conflictedCommits,
+	};
+}

@@ -236,4 +236,112 @@ describe("Stack Detection", () => {
 			);
 		});
 	});
+
+	describe("hasConflicts", () => {
+		it("should detect when there are no conflicts in the stack", async () => {
+			// Arrange
+			const mockExecutor: CommandExecutor = {
+				exec: async (cmd: string[]) => {
+					const cmdStr = cmd.join(" ");
+					if (
+						cmdStr.includes("jj log") &&
+						cmdStr.includes("builtin_log_oneline")
+					) {
+						return createMockResponse(
+							`
+wqnwkozp tommy@example.com 2025-08-13 10:00:00 bookmark-a 12345678
+vxyzabcd tommy@example.com 2025-08-13 09:00:00 bookmark-b 87654321
+`.trim(),
+						);
+					}
+					throw new Error(`Unexpected command: ${cmdStr}`);
+				},
+			};
+
+			// Act
+			const { hasConflicts } = await import("../src/stack_detection.ts");
+			const result = await hasConflicts(mockExecutor, "master");
+
+			// Assert
+			assertEquals(result.hasConflicts, false);
+			assertEquals(result.conflictedCommits.length, 0);
+		});
+
+		it("should detect when there are conflicts in the stack", async () => {
+			// Arrange
+			const mockExecutor: CommandExecutor = {
+				exec: async (cmd: string[]) => {
+					const cmdStr = cmd.join(" ");
+					if (
+						cmdStr.includes("jj log") &&
+						cmdStr.includes("builtin_log_oneline")
+					) {
+						return createMockResponse(
+							`
+wqnwkozp tommy@example.com 2025-08-13 10:00:00 bookmark-a 12345678
+vwptqkon tommy@example.com 2025-08-13 09:00:00 feat/pr-risk-schemas 2ddc0365 conflict
+`.trim(),
+						);
+					}
+					throw new Error(`Unexpected command: ${cmdStr}`);
+				},
+			};
+
+			// Act
+			const { hasConflicts } = await import("../src/stack_detection.ts");
+			const result = await hasConflicts(mockExecutor, "master");
+
+			// Assert
+			assertEquals(result.hasConflicts, true);
+			assertEquals(result.conflictedCommits.length, 1);
+			assertEquals(result.conflictedCommits[0].changeId, "vwptqkon");
+			assertEquals(
+				result.conflictedCommits[0].bookmark,
+				"feat/pr-risk-schemas",
+			);
+			assertEquals(result.conflictedCommits[0].description, "conflict");
+		});
+
+		it("should detect multiple conflicts in the stack", async () => {
+			// Arrange
+			const mockExecutor: CommandExecutor = {
+				exec: async (cmd: string[]) => {
+					const cmdStr = cmd.join(" ");
+					if (
+						cmdStr.includes("jj log") &&
+						cmdStr.includes("builtin_log_oneline")
+					) {
+						return createMockResponse(
+							`
+wqnwkozp tommy@example.com 2025-08-13 10:00:00 bookmark-a 12345678
+vwptqkon tommy@example.com 2025-08-13 09:00:00 feat/pr-risk-schemas 2ddc0365 conflict
+abcdefgh tommy@example.com 2025-08-13 08:00:00 another-bookmark 11111111 (conflict) some description
+`.trim(),
+						);
+					}
+					throw new Error(`Unexpected command: ${cmdStr}`);
+				},
+			};
+
+			// Act
+			const { hasConflicts } = await import("../src/stack_detection.ts");
+			const result = await hasConflicts(mockExecutor, "master");
+
+			// Assert
+			assertEquals(result.hasConflicts, true);
+			assertEquals(result.conflictedCommits.length, 2);
+			assertEquals(result.conflictedCommits[0].changeId, "vwptqkon");
+			assertEquals(
+				result.conflictedCommits[0].bookmark,
+				"feat/pr-risk-schemas",
+			);
+			assertEquals(result.conflictedCommits[0].description, "conflict");
+			assertEquals(result.conflictedCommits[1].changeId, "abcdefgh");
+			assertEquals(result.conflictedCommits[1].bookmark, "another-bookmark");
+			assertEquals(
+				result.conflictedCommits[1].description,
+				"(conflict) some description",
+			);
+		});
+	});
 });

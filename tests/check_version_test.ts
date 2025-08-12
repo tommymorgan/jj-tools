@@ -1,6 +1,6 @@
 import { assertEquals } from "@std/assert";
+import { compare, parse as parseSemver } from "@std/semver";
 import { describe, it } from "@std/testing/bdd";
-import { parse as parseSemver, compare } from "@std/semver";
 
 describe("Version Checking with semver library", () => {
 	describe("semver validation", () => {
