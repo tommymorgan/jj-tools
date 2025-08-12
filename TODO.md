@@ -4,6 +4,7 @@
 
 - [ ] Install Biome for code formatting and linting
 - [ ] Update dependencies
+- [ ] Add --version flag to CLI
 
 ## Release Management
 
