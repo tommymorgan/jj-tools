@@ -44,7 +44,7 @@ async function getPreviousVersion(): Promise<string | null> {
 		// In CI on push events, we need to check against the parent commit
 		// because the current commit IS what's on origin/main
 		const isGitHubPushEvent = Deno.env.get("GITHUB_EVENT_NAME") === "push";
-		
+
 		let ref: string;
 		if (isGitHubPushEvent) {
 			// Get version from parent commit
