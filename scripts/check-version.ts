@@ -41,12 +41,23 @@ async function getGitDefaultBranch(): Promise<string> {
 
 async function getPreviousVersion(): Promise<string | null> {
 	try {
-		// Get the default branch name
-		const defaultBranch = await getGitDefaultBranch();
+		// In CI on push events, we need to check against the parent commit
+		// because the current commit IS what's on origin/main
+		const isGitHubPushEvent = Deno.env.get("GITHUB_EVENT_NAME") === "push";
+		
+		let ref: string;
+		if (isGitHubPushEvent) {
+			// Get version from parent commit
+			ref = "HEAD~1:deno.json";
+		} else {
+			// Get the default branch name for other cases
+			const defaultBranch = await getGitDefaultBranch();
+			ref = `origin/${defaultBranch}:deno.json`;
+		}
 
-		// Get version from origin/main's deno.json
+		// Get version from the determined ref
 		const cmd = new Deno.Command("git", {
-			args: ["show", `origin/${defaultBranch}:deno.json`],
+			args: ["show", ref],
 			stdout: "piped",
 			stderr: "piped",
 		});
