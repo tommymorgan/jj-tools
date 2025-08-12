@@ -44,6 +44,11 @@ function parseBookmarkLine(line: string): string[] {
 }
 
 function createBookmark(name: string): Bookmark | null {
+	// Filter out remote-only bookmarks (e.g., bookmark@origin)
+	if (name.includes("@")) {
+		return null;
+	}
+	
 	const cleanName = name.replace("*", "");
 	const isCurrent = name.includes("*");
 

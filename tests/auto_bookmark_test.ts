@@ -77,6 +77,19 @@ function handleBookmarkDeleteCommand(
 	return null;
 }
 
+// Helper function to handle jj bookmark forget commands
+function handleBookmarkForgetCommand(
+	cmd: string[],
+	forgottenBookmarks: string[],
+) {
+	if (cmd.includes("bookmark") && cmd.includes("forget")) {
+		const bookmarkName = cmd[cmd.indexOf("forget") + 1];
+		forgottenBookmarks.push(bookmarkName);
+		return createMockResponse("");
+	}
+	return null;
+}
+
 // Helper function to create mock executor for findUnbookmarkedChanges tests
 function createFindUnbookmarkedMockExecutor(
 	logOutput: string,
@@ -97,12 +110,14 @@ function createFindUnbookmarkedMockExecutor(
 function createCleanupMockExecutor(
 	prStateMap: Record<string, string>,
 	deletedBookmarks: string[],
+	forgottenBookmarks: string[] = [],
 ): CommandExecutor {
 	return {
 		exec: async (cmd: string[]) => {
 			return (
 				handlePrViewCommand(cmd, prStateMap) ||
 				handleBookmarkDeleteCommand(cmd, deletedBookmarks) ||
+				handleBookmarkForgetCommand(cmd, forgottenBookmarks) ||
 				createMockResponse("", "Unknown command", 1)
 			);
 		},
@@ -462,6 +477,7 @@ auto/jjsp-add-user-profile-szqzyp: szqzyprq bd5c84f0 feat: add user profile`;
 		it("should delete auto bookmarks for merged PRs", async () => {
 			// Arrange
 			const deletedBookmarks: string[] = [];
+			const forgottenBookmarks: string[] = [];
 			const prStateMap = {
 				"auto/jjsp-feature-abc123": "MERGED",
 				"auto/jjsp-fix-bug-def456": "CLOSED",
@@ -471,6 +487,7 @@ auto/jjsp-add-user-profile-szqzyp: szqzyprq bd5c84f0 feat: add user profile`;
 			const mockExecutor = createCleanupMockExecutor(
 				prStateMap,
 				deletedBookmarks,
+				forgottenBookmarks,
 			);
 
 			const manager = new AutoBookmarkManager(mockExecutor);
@@ -490,13 +507,18 @@ auto/jjsp-add-user-profile-szqzyp: szqzyprq bd5c84f0 feat: add user profile`;
 			assertEquals(result.kept.length, 1);
 			assertEquals(result.kept.includes("auto/jjsp-update-deps-ghi789"), true);
 			assertEquals(deletedBookmarks.length, 2);
+			// Should also forget remote tracking bookmarks
+			assertEquals(forgottenBookmarks.length, 2);
+			assertEquals(forgottenBookmarks.includes("auto/jjsp-feature-abc123@origin"), true);
+			assertEquals(forgottenBookmarks.includes("auto/jjsp-fix-bug-def456@origin"), true);
 		});
 
 		it("should handle bookmarks without PRs", async () => {
 			// Arrange
 			const deletedBookmarks: string[] = [];
+			const forgottenBookmarks: string[] = [];
 			// Empty prStateMap means no PRs found
-			const mockExecutor = createCleanupMockExecutor({}, deletedBookmarks);
+			const mockExecutor = createCleanupMockExecutor({}, deletedBookmarks, forgottenBookmarks);
 
 			const manager = new AutoBookmarkManager(mockExecutor);
 			const autoBookmarks = ["auto/jjsp-orphaned-abc123"];
@@ -509,6 +531,7 @@ auto/jjsp-add-user-profile-szqzyp: szqzyprq bd5c84f0 feat: add user profile`;
 			assertEquals(result.deleted[0], "auto/jjsp-orphaned-abc123");
 			assertEquals(result.kept.length, 0);
 			assertEquals(deletedBookmarks[0], "auto/jjsp-orphaned-abc123");
+			assertEquals(forgottenBookmarks[0], "auto/jjsp-orphaned-abc123@origin");
 		});
 	});
 
@@ -516,8 +539,18 @@ auto/jjsp-add-user-profile-szqzyp: szqzyprq bd5c84f0 feat: add user profile`;
 		it("should delete auto bookmarks not in current stack", async () => {
 			// Arrange
 			const deletedBookmarks: string[] = [];
-			// Only needs bookmark delete functionality
-			const mockExecutor = createCleanupMockExecutor({}, deletedBookmarks);
+			const forgottenBookmarks: string[] = [];
+			// Track both delete and forget commands
+			const mockExecutor: CommandExecutor = {
+				exec: async (cmd: string[]) => {
+					return (
+						handleBookmarkDeleteCommand(cmd, deletedBookmarks) ||
+						handleBookmarkForgetCommand(cmd, forgottenBookmarks) ||
+						handlePrViewCommand(cmd, {}) ||
+						createMockResponse("", "Unknown command", 1)
+					);
+				},
+			};
 
 			const manager = new AutoBookmarkManager(mockExecutor);
 			const autoBookmarks = [
@@ -543,7 +576,12 @@ auto/jjsp-add-user-profile-szqzyp: szqzyprq bd5c84f0 feat: add user profile`;
 			assertEquals(result.deleted.includes("auto/jjsp-also-orphaned-ghi789"), true);
 			assertEquals(result.kept.length, 1);
 			assertEquals(result.kept[0], "auto/jjsp-in-stack-abc123");
+			// Should delete both local bookmarks
 			assertEquals(deletedBookmarks.length, 2);
+			// Should also forget the remote tracking bookmarks
+			assertEquals(forgottenBookmarks.length, 2);
+			assertEquals(forgottenBookmarks.includes("auto/jjsp-orphaned-def456@origin"), true);
+			assertEquals(forgottenBookmarks.includes("auto/jjsp-also-orphaned-ghi789@origin"), true);
 		});
 	});
 });

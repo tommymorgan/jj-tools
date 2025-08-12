@@ -223,7 +223,10 @@ export class AutoBookmarkManager {
 	}
 
 	private async deleteBookmark(bookmark: string): Promise<void> {
+		// Delete the local bookmark
 		await this.executor.exec(["jj", "bookmark", "delete", bookmark]);
+		// Also forget the remote tracking bookmark to prevent it from appearing as bookmark@origin
+		await this.executor.exec(["jj", "bookmark", "forget", `${bookmark}@origin`]);
 	}
 
 	async cleanupOrphanedAutoBookmarks(
@@ -237,7 +240,7 @@ export class AutoBookmarkManager {
 		for (const bookmark of autoBookmarks) {
 			if (!stackSet.has(bookmark)) {
 				// Orphaned - not in current stack
-				await this.executor.exec(["jj", "bookmark", "delete", bookmark]);
+				await this.deleteBookmark(bookmark);
 				deleted.push(bookmark);
 			} else {
 				kept.push(bookmark);

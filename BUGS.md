@@ -50,43 +50,6 @@ Full output should be displayed without errors
 
 
 
-### 🐛 BUG-005: Deleted Bookmarks Still Appear in Stack Detection
-**Status**: 🔴 Open  
-**Severity**: Medium  
-**Category**: State Management  
-**Steps to Reproduce**:
-1. Create PRs with auto-bookmarks
-2. Close the PRs on GitHub
-3. Run `jj-stack-prs` which deletes the bookmarks
-4. Run `jj-stack-prs` again immediately
-5. Observe that deleted bookmarks still appear with "@origin" suffix
-
-**Expected Behavior**:
-Deleted bookmarks should not appear in stack detection
-
-**Actual Behavior**:
-Deleted bookmarks appear with "@origin" suffix and tool attempts to create PRs for them
-
-**Test Output**:
-```
-🧹 Cleaning up auto-bookmarks...
-  - auto/add-authentication-qvmssl: PR merged/closed ✓ deleted
-🔍 Detecting stack...
-📚 Found stack with 5 bookmark(s)
-[1/5] 🆕 Creating PR: auto/add-authentication-qvmssl@origin → master
-```
-
-**Impact**:
-- Confusing behavior after cleanup
-- Attempts to create PRs for deleted bookmarks
-- May fail when pushing deleted bookmarks
-
-**Suggested Fix**:
-- Filter out bookmarks marked as deleted
-- Run `jj bookmark forget` after deletion
-- Check bookmark status before including in stack
-
----
 
 ### 🐛 BUG-006: No Validation for GitHub Authentication
 **Status**: 🔴 Open  
@@ -176,7 +139,6 @@ Tool continues processing and may fail later with unclear errors
 
 ### Medium Priority Fixes
 1. Handle broken pipe errors (BUG-001)
-2. Fix deleted bookmark detection (BUG-005)
 
 ### Low Priority Fixes
 1. Add auth validation (BUG-006)

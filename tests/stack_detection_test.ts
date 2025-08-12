@@ -194,5 +194,40 @@ describe("Stack Detection", () => {
 				stack.bookmarks[1].commitHash,
 			);
 		});
+
+		it("should filter out remote-only bookmarks (BUG-005 fix)", async () => {
+			// Arrange - simulating bookmarks that were deleted locally but still exist on remote
+			const logOutput = `feature-3\nauto/jjsp-feature-2-abc123@origin\nfeature-1`;
+			const mockExecutor = createMockExecutor(logOutput);
+
+			// Act
+			const stack = await detectStack(mockExecutor);
+
+			// Assert - should only include local bookmarks, not @origin ones
+			assertEquals(stack.bookmarks.length, 2);
+			assertEquals(stack.bookmarks[0].name, "feature-1");
+			assertEquals(stack.bookmarks[1].name, "feature-3");
+			// The @origin bookmark should be filtered out
+			const bookmarkNames = stack.bookmarks.map((b) => b.name);
+			assertEquals(bookmarkNames.includes("auto/jjsp-feature-2-abc123@origin"), false);
+			assertEquals(bookmarkNames.includes("auto/jjsp-feature-2-abc123"), false);
+		});
+
+		it("should filter out all remote tracking bookmarks", async () => {
+			// Arrange - multiple remote tracking bookmarks
+			const logOutput = `local-feature\nremote-1@origin\nremote-2@upstream\nlocal-fix`;
+			const mockExecutor = createMockExecutor(logOutput);
+
+			// Act
+			const stack = await detectStack(mockExecutor);
+
+			// Assert - should only include local bookmarks
+			assertEquals(stack.bookmarks.length, 2);
+			assertEquals(stack.bookmarks[0].name, "local-fix");
+			assertEquals(stack.bookmarks[1].name, "local-feature");
+			// No remote tracking bookmarks should be included
+			const bookmarkNames = stack.bookmarks.map((b) => b.name);
+			assertEquals(bookmarkNames.some((n) => n.includes("@")), false);
+		});
 	});
 });
