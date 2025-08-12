@@ -1,24 +1,30 @@
 {
-  "tasks": {
-    "test": "deno test --allow-run --allow-read --allow-write --allow-env",
-    "test:watch": "deno test --allow-run --allow-read --allow-write --allow-env --watch",
-    "run": "deno run --allow-run --allow-read --allow-write --allow-env src/main.ts",
-    "compile": "deno compile --allow-run --allow-read --allow-write --allow-env --output jj-stack-prs src/main.ts"
-  },
-  "imports": {
-    "@std/testing": "https://deno.land/std@0.210.0/testing/mod.ts",
-    "@std/testing/bdd": "https://deno.land/std@0.210.0/testing/bdd.ts",
-    "@std/assert": "https://deno.land/std@0.210.0/assert/mod.ts",
-    "@std/flags": "https://deno.land/std@0.210.0/flags/mod.ts",
-    "@std/fmt": "https://deno.land/std@0.210.0/fmt/mod.ts"
-  },
-  "compilerOptions": {
-    "strict": true,
-    "noImplicitAny": true,
-    "strictNullChecks": true,
-    "strictFunctionTypes": true,
-    "strictBindCallApply": true,
-    "strictPropertyInitialization": true,
-    "noImplicitThis": true
-  }
+	"tasks": {
+		"test": "deno test --allow-run --allow-read --allow-write --allow-env",
+		"test:watch": "deno test --allow-run --allow-read --allow-write --allow-env --watch",
+		"run": "deno run --allow-run --allow-read --allow-write --allow-env src/main.ts",
+		"compile": "deno compile --allow-run --allow-read --allow-write --allow-env --output jj-stack-prs src/main.ts",
+		"lint": "npx @biomejs/biome lint .",
+		"lint:fix": "npx @biomejs/biome lint --fix .",
+		"format": "npx @biomejs/biome format --write .",
+		"format:check": "npx @biomejs/biome format .",
+		"check": "npx @biomejs/biome check .",
+		"check:fix": "npx @biomejs/biome check --fix ."
+	},
+	"imports": {
+		"@std/testing": "https://deno.land/std@0.210.0/testing/mod.ts",
+		"@std/testing/bdd": "https://deno.land/std@0.210.0/testing/bdd.ts",
+		"@std/assert": "https://deno.land/std@0.210.0/assert/mod.ts",
+		"@std/flags": "https://deno.land/std@0.210.0/flags/mod.ts",
+		"@std/fmt": "https://deno.land/std@0.210.0/fmt/mod.ts"
+	},
+	"compilerOptions": {
+		"strict": true,
+		"noImplicitAny": true,
+		"strictNullChecks": true,
+		"strictFunctionTypes": true,
+		"strictBindCallApply": true,
+		"strictPropertyInitialization": true,
+		"noImplicitThis": true
+	}
 }

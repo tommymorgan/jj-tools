@@ -1,60 +1,66 @@
 import { parse } from "@std/flags";
 
 export interface CLIOptions {
-  baseBranch: string;
-  autoBookmark: boolean;
-  keepAuto: boolean;
-  cleanupAllAuto: boolean;
-  help: boolean;
-  dryRun: boolean;
+	baseBranch: string;
+	autoBookmark: boolean;
+	keepAuto: boolean;
+	cleanupAllAuto: boolean;
+	help: boolean;
+	dryRun: boolean;
 }
 
 export function parseArguments(args: string[]): CLIOptions {
-  const flags = parse(args, {
-    string: ["base"],
-    boolean: ["auto-bookmark", "keep-auto", "cleanup-all-auto", "help", "dry-run"],
-    alias: {
-      h: "help",
-      b: "base"
-    },
-    default: {
-      base: "master",
-      "auto-bookmark": false,
-      "keep-auto": false,
-      "cleanup-all-auto": false,
-      help: false,
-      "dry-run": false
-    }
-  });
+	const flags = parse(args, {
+		string: ["base"],
+		boolean: [
+			"auto-bookmark",
+			"keep-auto",
+			"cleanup-all-auto",
+			"help",
+			"dry-run",
+		],
+		alias: {
+			h: "help",
+			b: "base",
+		},
+		default: {
+			base: "master",
+			"auto-bookmark": false,
+			"keep-auto": false,
+			"cleanup-all-auto": false,
+			help: false,
+			"dry-run": false,
+		},
+	});
 
-  return {
-    baseBranch: flags.base as string,
-    autoBookmark: flags["auto-bookmark"] as boolean,
-    keepAuto: flags["keep-auto"] as boolean,
-    cleanupAllAuto: flags["cleanup-all-auto"] as boolean,
-    help: flags.help as boolean,
-    dryRun: flags["dry-run"] as boolean
-  };
+	return {
+		baseBranch: flags.base as string,
+		autoBookmark: flags["auto-bookmark"] as boolean,
+		keepAuto: flags["keep-auto"] as boolean,
+		cleanupAllAuto: flags["cleanup-all-auto"] as boolean,
+		help: flags.help as boolean,
+		dryRun: flags["dry-run"] as boolean,
+	};
 }
 
 export function validateOptions(options: CLIOptions): string[] {
-  const errors: string[] = [];
+	const errors: string[] = [];
 
-  // Check for conflicting options
-  if (options.keepAuto && options.cleanupAllAuto) {
-    errors.push("Cannot use --keep-auto and --cleanup-all-auto together");
-  }
+	// Check for conflicting options
+	if (options.keepAuto && options.cleanupAllAuto) {
+		errors.push("Cannot use --keep-auto and --cleanup-all-auto together");
+	}
 
-  // Validate base branch
-  if (!options.baseBranch || options.baseBranch.trim() === "") {
-    errors.push("Base branch cannot be empty");
-  }
+	// Validate base branch
+	if (!options.baseBranch || options.baseBranch.trim() === "") {
+		errors.push("Base branch cannot be empty");
+	}
 
-  return errors;
+	return errors;
 }
 
 export function showHelp(): string {
-  return `jj-stack-prs - Create GitHub PRs from Jujutsu stack
+	return `jj-stack-prs - Create GitHub PRs from Jujutsu stack
 
 USAGE:
   jj-stack-prs [OPTIONS]

@@ -23,7 +23,27 @@ deno compile --allow-run --allow-read --allow-write --allow-env --output jj-stac
 ```
 
 ### Linting and Type Checking
-Currently, this project does not have Biome configured for linting. The TODO.md file indicates Biome should be installed for code formatting and linting.
+```bash
+# Run linting
+deno task lint
+
+# Fix linting issues
+deno task lint:fix
+
+# Format code
+deno task format
+
+# Check formatting
+deno task format:check
+
+# Run both linting and formatting checks
+deno task check
+
+# Fix both linting and formatting issues
+deno task check:fix
+```
+
+The project uses Biome for code formatting and linting with strict complexity rules (max cognitive complexity: 5).
 
 ## Architecture
 
