@@ -32,7 +32,7 @@ async function getTrunkBookmarks(
 	]);
 
 	if (result.code !== 0) return null;
-	
+
 	const bookmarks = result.stdout.trim();
 	return bookmarks || null;
 }
@@ -44,12 +44,12 @@ function filterLocalBookmarks(bookmarks: string): string[] {
 
 function selectBestBaseBranch(localBookmarks: string[]): string {
 	const commonBases = ["main", "master", "trunk", "develop", "development"];
-	
+
 	for (const base of commonBases) {
 		if (localBookmarks.includes(base)) {
 			return base;
 		}
 	}
-	
+
 	return localBookmarks[0];
 }

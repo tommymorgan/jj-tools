@@ -209,7 +209,10 @@ describe("Stack Detection", () => {
 			assertEquals(stack.bookmarks[1].name, "feature-3");
 			// The @origin bookmark should be filtered out
 			const bookmarkNames = stack.bookmarks.map((b) => b.name);
-			assertEquals(bookmarkNames.includes("auto/jjsp-feature-2-abc123@origin"), false);
+			assertEquals(
+				bookmarkNames.includes("auto/jjsp-feature-2-abc123@origin"),
+				false,
+			);
 			assertEquals(bookmarkNames.includes("auto/jjsp-feature-2-abc123"), false);
 		});
 
@@ -227,7 +230,10 @@ describe("Stack Detection", () => {
 			assertEquals(stack.bookmarks[1].name, "local-feature");
 			// No remote tracking bookmarks should be included
 			const bookmarkNames = stack.bookmarks.map((b) => b.name);
-			assertEquals(bookmarkNames.some((n) => n.includes("@")), false);
+			assertEquals(
+				bookmarkNames.some((n) => n.includes("@")),
+				false,
+			);
 		});
 	});
 });

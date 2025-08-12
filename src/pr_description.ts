@@ -47,13 +47,14 @@ export class PRDescriptionGenerator {
 
 		// Add full chain visualization
 		const today = new Date().toISOString().split("T")[0];
-		sections.push(`Full chain of PRs as of ${today}:`);
+		sections.push(`PR Stack (review in order) as of ${today}:`);
 
-		// Add each PR in the chain
+		// Add each PR in the chain as an ordered list
 		for (let i = 0; i < fullChain.length; i++) {
 			const pr = fullChain[i];
 			const isCurrent = pr === currentPR;
-			sections.push(this.formatChainItem(pr, isCurrent));
+			const orderNumber = i + 1;
+			sections.push(this.formatChainItem(pr, isCurrent, orderNumber));
 		}
 
 		// Add footer
@@ -95,7 +96,7 @@ export class PRDescriptionGenerator {
 	}
 
 	private findContentEnd(lines: string[], startIndex: number): number {
-		const endMarkers = ["---", "Full chain of PRs"];
+		const endMarkers = ["---", "Full chain of PRs", "PR Stack"];
 
 		for (let i = startIndex; i < lines.length; i++) {
 			const line = lines[i];
@@ -132,7 +133,7 @@ export class PRDescriptionGenerator {
 		return "ready for review";
 	}
 
-	formatChainItem(item: PRChainInfo, isCurrent: boolean): string {
+	formatChainItem(item: PRChainInfo, isCurrent: boolean, orderNumber: number): string {
 		const status = this.formatPRStatus(item.isDraft, item.isReady);
 
 		let line: string;
@@ -143,9 +144,9 @@ export class PRDescriptionGenerator {
 		}
 
 		if (isCurrent) {
-			return `• **${line}**`;
+			return `${orderNumber}. **${line}** ← You are here`;
 		} else {
-			return `• ${line}`;
+			return `${orderNumber}. ${line}`;
 		}
 	}
 }

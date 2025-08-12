@@ -64,7 +64,11 @@ describe("Base Branch Detection", () => {
 			const mockExecutor: CommandExecutor = {
 				exec: async (cmd: string[]) => {
 					if (cmd.includes("trunk()")) {
-						return { stdout: "feature-1 master other-branch", stderr: "", code: 0 };
+						return {
+							stdout: "feature-1 master other-branch",
+							stderr: "",
+							code: 0,
+						};
 					}
 					return { stdout: "", stderr: "Unknown command", code: 1 };
 				},
@@ -133,7 +137,11 @@ describe("Base Branch Detection", () => {
 			const mockExecutor: CommandExecutor = {
 				exec: async (cmd: string[]) => {
 					if (cmd.includes("trunk()")) {
-						return { stdout: "custom-base another-branch", stderr: "", code: 0 };
+						return {
+							stdout: "custom-base another-branch",
+							stderr: "",
+							code: 0,
+						};
 					}
 					return { stdout: "", stderr: "Unknown command", code: 1 };
 				},
@@ -151,7 +159,11 @@ describe("Base Branch Detection", () => {
 			const mockExecutor: CommandExecutor = {
 				exec: async (cmd: string[]) => {
 					if (cmd.includes("trunk()")) {
-						return { stdout: "main@origin master@upstream", stderr: "", code: 0 };
+						return {
+							stdout: "main@origin master@upstream",
+							stderr: "",
+							code: 0,
+						};
 					}
 					return { stdout: "", stderr: "Unknown command", code: 1 };
 				},

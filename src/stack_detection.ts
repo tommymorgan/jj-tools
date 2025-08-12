@@ -21,7 +21,7 @@ async function getJjLogOutput(executor: CommandExecutor): Promise<string> {
 		"jj",
 		"log",
 		"-r",
-		"trunk()..@",
+		"::@ & trunk()..",
 		"--no-graph",
 		"--template",
 		'bookmarks ++ "\\n"',
@@ -48,7 +48,7 @@ function createBookmark(name: string): Bookmark | null {
 	if (name.includes("@")) {
 		return null;
 	}
-	
+
 	const cleanName = name.replace("*", "");
 	const isCurrent = name.includes("*");
 

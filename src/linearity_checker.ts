@@ -39,7 +39,7 @@ async function checkForMergeCommits(
 		"jj",
 		"log",
 		"-r",
-		"trunk()..@",
+		"::@ & trunk()..",
 		"--no-graph",
 		"--template",
 		'if(parents.len() > 1, change_id ++ " MERGE " ++ parents.len() ++ "\\n", "")',
@@ -54,7 +54,7 @@ async function checkForMergeCommits(
 	}
 
 	const mergeCommits = parseMergeCommits(result.stdout);
-	
+
 	if (mergeCommits.length > 0) {
 		return {
 			isLinear: false,
@@ -91,7 +91,7 @@ async function checkForDivergentBranches(
 		"jj",
 		"log",
 		"-r",
-		"trunk()..@",
+		"::@ & trunk()..",
 		"--no-graph",
 		"--template",
 		'change_id ++ " " ++ children.len() ++ "\\n"',

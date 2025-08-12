@@ -281,7 +281,7 @@ def456 feature-2`;
 				.replace("auto/", "")
 				.replace("-abc123", "");
 			// The middle part now includes "jjsp-" (5 chars) + up to 30 chars of message
-		assertEquals(middlePart.length <= 35, true);
+			assertEquals(middlePart.length <= 35, true);
 		});
 
 		it("should handle special characters in commit messages", () => {
@@ -509,8 +509,14 @@ auto/jjsp-add-user-profile-szqzyp: szqzyprq bd5c84f0 feat: add user profile`;
 			assertEquals(deletedBookmarks.length, 2);
 			// Should also forget remote tracking bookmarks
 			assertEquals(forgottenBookmarks.length, 2);
-			assertEquals(forgottenBookmarks.includes("auto/jjsp-feature-abc123@origin"), true);
-			assertEquals(forgottenBookmarks.includes("auto/jjsp-fix-bug-def456@origin"), true);
+			assertEquals(
+				forgottenBookmarks.includes("auto/jjsp-feature-abc123@origin"),
+				true,
+			);
+			assertEquals(
+				forgottenBookmarks.includes("auto/jjsp-fix-bug-def456@origin"),
+				true,
+			);
 		});
 
 		it("should handle bookmarks without PRs", async () => {
@@ -518,7 +524,11 @@ auto/jjsp-add-user-profile-szqzyp: szqzyprq bd5c84f0 feat: add user profile`;
 			const deletedBookmarks: string[] = [];
 			const forgottenBookmarks: string[] = [];
 			// Empty prStateMap means no PRs found
-			const mockExecutor = createCleanupMockExecutor({}, deletedBookmarks, forgottenBookmarks);
+			const mockExecutor = createCleanupMockExecutor(
+				{},
+				deletedBookmarks,
+				forgottenBookmarks,
+			);
 
 			const manager = new AutoBookmarkManager(mockExecutor);
 			const autoBookmarks = ["auto/jjsp-orphaned-abc123"];
@@ -573,15 +583,24 @@ auto/jjsp-add-user-profile-szqzyp: szqzyprq bd5c84f0 feat: add user profile`;
 			// Assert
 			assertEquals(result.deleted.length, 2);
 			assertEquals(result.deleted.includes("auto/jjsp-orphaned-def456"), true);
-			assertEquals(result.deleted.includes("auto/jjsp-also-orphaned-ghi789"), true);
+			assertEquals(
+				result.deleted.includes("auto/jjsp-also-orphaned-ghi789"),
+				true,
+			);
 			assertEquals(result.kept.length, 1);
 			assertEquals(result.kept[0], "auto/jjsp-in-stack-abc123");
 			// Should delete both local bookmarks
 			assertEquals(deletedBookmarks.length, 2);
 			// Should also forget the remote tracking bookmarks
 			assertEquals(forgottenBookmarks.length, 2);
-			assertEquals(forgottenBookmarks.includes("auto/jjsp-orphaned-def456@origin"), true);
-			assertEquals(forgottenBookmarks.includes("auto/jjsp-also-orphaned-ghi789@origin"), true);
+			assertEquals(
+				forgottenBookmarks.includes("auto/jjsp-orphaned-def456@origin"),
+				true,
+			);
+			assertEquals(
+				forgottenBookmarks.includes("auto/jjsp-also-orphaned-ghi789@origin"),
+				true,
+			);
 		});
 	});
 });

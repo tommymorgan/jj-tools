@@ -42,7 +42,7 @@ export class AutoBookmarkManager {
 			"log",
 			"--no-graph",
 			"-r",
-			"trunk()..@",
+			"::@ & trunk()..",
 			"--template",
 			'change_id ++ " " ++ bookmarks ++ "\\n"',
 		]);
@@ -226,7 +226,12 @@ export class AutoBookmarkManager {
 		// Delete the local bookmark
 		await this.executor.exec(["jj", "bookmark", "delete", bookmark]);
 		// Also forget the remote tracking bookmark to prevent it from appearing as bookmark@origin
-		await this.executor.exec(["jj", "bookmark", "forget", `${bookmark}@origin`]);
+		await this.executor.exec([
+			"jj",
+			"bookmark",
+			"forget",
+			`${bookmark}@origin`,
+		]);
 	}
 
 	async cleanupOrphanedAutoBookmarks(

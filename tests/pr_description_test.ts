@@ -135,18 +135,18 @@ describe("PR Description Generator", () => {
 			const description = generator.generateDescription(options);
 
 			// Assert
-			assertStringIncludes(description, "Full chain of PRs as of");
+			assertStringIncludes(description, "PR Stack (review in order) as of");
 			assertStringIncludes(
 				description,
-				"• PR #101: feature-1 → master (ready for review)",
+				"1. PR #101: feature-1 → master (ready for review)",
 			);
 			assertStringIncludes(
 				description,
-				"• **PR #102: feature-2 → feature-1 (draft)**",
+				"2. **PR #102: feature-2 → feature-1 (draft)** ← You are here",
 			);
 			assertStringIncludes(
 				description,
-				"• PR #103: feature-3 → feature-2 (draft)",
+				"3. PR #103: feature-3 → feature-2 (draft)",
 			);
 			assertStringIncludes(description, "Created with jj (Jujutsu) stack-prs");
 		});
@@ -182,13 +182,13 @@ describe("PR Description Generator", () => {
 			const description = generator.generateDescription(options);
 
 			// Assert
-			// Current PR should be bold
+			// Current PR should be bold with "You are here" marker
 			assertStringIncludes(
 				description,
-				"• **PR #201: fix-1 → develop (ready for review)**",
+				"1. **PR #201: fix-1 → develop (ready for review)** ← You are here",
 			);
-			// Other PR should not be bold
-			assertStringIncludes(description, "• PR #202: fix-2 → fix-1");
+			// Other PR should not be bold and not have the marker
+			assertStringIncludes(description, "2. PR #202: fix-2 → fix-1");
 		});
 
 		it("should preserve original body content", () => {
@@ -260,7 +260,7 @@ Run \`npm test\``;
 			const today = new Date().toISOString().split("T")[0];
 
 			// Assert
-			assertStringIncludes(description, `Full chain of PRs as of ${today}`);
+			assertStringIncludes(description, `PR Stack (review in order) as of ${today}`);
 		});
 	});
 
@@ -351,12 +351,12 @@ Created with jj (Jujutsu) stack-prs`;
 			};
 
 			// Act
-			const formatted = generator.formatChainItem(item, false);
+			const formatted = generator.formatChainItem(item, false, 1);
 
 			// Assert
 			assertEquals(
 				formatted,
-				"• PR #101: feature-1 → master (ready for review)",
+				"1. PR #101: feature-1 → master (ready for review)",
 			);
 		});
 
@@ -372,10 +372,10 @@ Created with jj (Jujutsu) stack-prs`;
 			};
 
 			// Act
-			const formatted = generator.formatChainItem(item, true);
+			const formatted = generator.formatChainItem(item, true, 2);
 
 			// Assert
-			assertEquals(formatted, "• **PR #102: feature-2 → feature-1 (draft)**");
+			assertEquals(formatted, "2. **PR #102: feature-2 → feature-1 (draft)** ← You are here");
 		});
 
 		it("should handle PR without number", () => {
@@ -389,10 +389,10 @@ Created with jj (Jujutsu) stack-prs`;
 			};
 
 			// Act
-			const formatted = generator.formatChainItem(item, false);
+			const formatted = generator.formatChainItem(item, false, 3);
 
 			// Assert
-			assertEquals(formatted, "• feature-3 → feature-2 (draft)");
+			assertEquals(formatted, "3. feature-3 → feature-2 (draft)");
 		});
 	});
 });

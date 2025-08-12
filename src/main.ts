@@ -1,5 +1,6 @@
 #!/usr/bin/env -S deno run --allow-run --allow-read --allow-write --allow-env
 
+import { validateGitHubAuthOrExit } from "./auth_validator.ts";
 import { AutoBookmarkManager } from "./auto_bookmark.ts";
 import { detectBaseBranch } from "./base_detector.ts";
 import {
@@ -151,9 +152,7 @@ function validateStackBookmarks(stack: StackInfo, options: CLIOptions): void {
 		safeError("\nCreate bookmarks for your changes. Examples:");
 		safeError("  jj bookmark create <name> -r @   # for current change");
 		safeError("  jj bookmark create <name> -r @-  # for previous change");
-		safeError(
-			"  jj bookmark create <name> -r @-- # for change before that",
-		);
+		safeError("  jj bookmark create <name> -r @-- # for change before that");
 		safeError("\nOr use --auto-bookmark to automatically create bookmarks");
 		Deno.exit(1);
 	}
@@ -370,8 +369,7 @@ function showSummary(
 
 	safeLog("\n📊 Summary:");
 	if (createdCount > 0) safeLog(`  • Created: ${createdCount} new PR(s)`);
-	if (updatedCount > 0)
-		safeLog(`  • Updated: ${updatedCount} existing PR(s)`);
+	if (updatedCount > 0) safeLog(`  • Updated: ${updatedCount} existing PR(s)`);
 	safeLog(`  • Ready for review: ${readyCount}`);
 	safeLog(`  • Drafts: ${draftCount}`);
 
@@ -412,10 +410,10 @@ async function processStack(ctx: AppContext): Promise<void> {
 
 async function detectAndValidateStack(ctx: AppContext): Promise<StackInfo> {
 	safeLog("🔍 Detecting stack...");
-	
+
 	// Check for non-linear stacks (BUG-004)
 	await ensureLinearStack(ctx.executor);
-	
+
 	const stack = await detectStack(ctx.executor, ctx.options.baseBranch);
 	validateStackBookmarks(stack, ctx.options);
 	safeLog(`📚 Found stack with ${stack.bookmarks.length} bookmark(s)`);
@@ -436,7 +434,9 @@ async function ensureLinearStack(executor: CommandExecutor): Promise<void> {
 		}
 	}
 	safeError("\n⚠️  This tool only supports linear stacks!");
-	safeError("  Please resolve merge commits or divergent branches before using jj-stack-prs.");
+	safeError(
+		"  Please resolve merge commits or divergent branches before using jj-stack-prs.",
+	);
 	safeError("  You can use 'jj rebase' to linearize your stack.");
 	Deno.exit(1);
 }
@@ -509,13 +509,16 @@ function handleError(error: unknown, options: CLIOptions): void {
 async function main() {
 	// Install handlers for broken pipe errors (BUG-001)
 	installBrokenPipeHandlers();
-	
+
 	const options = parseArguments(Deno.args);
 	await handleHelp(options);
 	handleValidationErrors(validateOptions(options));
 
 	const executor = new SystemCommandExecutor();
-	
+
+	// Validate GitHub authentication early (BUG-006)
+	await validateGitHubAuthOrExit(executor, options.dryRun);
+
 	// Auto-detect base branch if not provided
 	if (!options.baseBranch) {
 		const detectedBase = await detectBaseBranch(executor);
@@ -529,7 +532,7 @@ async function main() {
 			safeLog("   Use --base <branch> to specify a different base branch");
 		}
 	}
-	
+
 	const ctx: AppContext = {
 		executor,
 		prManager: new PullRequestManager(executor),
