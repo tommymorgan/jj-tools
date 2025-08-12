@@ -10,7 +10,9 @@
 		"format": "npx @biomejs/biome@latest format --write .",
 		"format:check": "npx @biomejs/biome@latest format .",
 		"check": "npx @biomejs/biome@latest check .",
-		"check:fix": "npx @biomejs/biome@latest check --fix ."
+		"check:fix": "npx @biomejs/biome@latest check --fix .",
+		"verify": "deno task typecheck && deno task lint && deno task test",
+		"ci": "deno task verify"
 	},
 	"imports": {
 		"@std/testing": "https://deno.land/std@0.210.0/testing/mod.ts",

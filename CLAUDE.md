@@ -106,3 +106,4 @@ Tests are organized by module in the `tests/` directory. The project uses Deno's
 - Requires GitHub CLI (`gh`) to be authenticated
 - Auto-bookmarks use the `auto/` prefix - avoid creating manual bookmarks with this prefix
 - The tool pushes all bookmarks to GitHub before creating PRs
+- Always run `deno task verify` before creating a new jj change.

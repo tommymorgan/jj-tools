@@ -47,40 +47,6 @@ Full output should be displayed without errors
 
 ---
 
-### 🐛 BUG-002: Trunk Bookmark Not Filtered from Stack
-**Status**: 🔴 Open  
-**Severity**: High  
-**Category**: Logic/Filtering  
-**Steps to Reproduce**:
-1. Create a bookmark named "trunk" in your repository
-2. Create other bookmarks on top of trunk
-3. Run `jj-stack-prs`
-4. Observe that PRs are created for trunk
-
-**Expected Behavior**:
-The "trunk" bookmark should be filtered out (similar to "master"), as it's typically used as a base branch
-
-**Actual Behavior**:
-"trunk" bookmark is included in the stack and PRs are created for it
-
-**Test Output**:
-```
-📚 Found stack with 11 bookmark(s)
-[10/11] 🆕 Creating PR: trunk → feature-9
-[11/11] 🆕 Creating PR: feature-10 → trunk
-```
-
-**Impact**:
-- Creates unnecessary PRs for base branches
-- Confuses the PR chain structure
-- May create PRs against protected branches
-
-**Suggested Fix**:
-- Add "trunk" to the list of filtered base branches
-- Consider making the filtered branch list configurable
-- Check for common base branch names: master, main, trunk, develop
-
----
 
 ### 🐛 BUG-003: Manual Bookmarks with auto/ Prefix Are Deleted
 **Status**: 🔴 Open  

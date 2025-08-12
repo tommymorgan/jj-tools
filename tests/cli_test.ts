@@ -17,7 +17,7 @@ describe("CLI Parser", () => {
 			const options = parseArguments(args);
 
 			// Assert
-			assertEquals(options.baseBranch, "master");
+			assertEquals(options.baseBranch, undefined); // Now auto-detected
 			assertEquals(options.autoBookmark, false);
 			assertEquals(options.keepAuto, false);
 			assertEquals(options.cleanupAllAuto, false);
@@ -157,10 +157,10 @@ describe("CLI Parser", () => {
 			);
 		});
 
-		it("should reject empty base branch", () => {
+		it("should accept undefined base branch (will be auto-detected)", () => {
 			// Arrange
 			const options: CLIOptions = {
-				baseBranch: "",
+				baseBranch: undefined,
 				autoBookmark: false,
 				keepAuto: false,
 				cleanupAllAuto: false,
@@ -172,8 +172,7 @@ describe("CLI Parser", () => {
 			const errors = validateOptions(options);
 
 			// Assert
-			assertEquals(errors.length, 1);
-			assertEquals(errors[0], "Base branch cannot be empty");
+			assertEquals(errors.length, 0); // No errors, base will be auto-detected
 		});
 	});
 

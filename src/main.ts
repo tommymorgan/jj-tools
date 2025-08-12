@@ -1,6 +1,7 @@
 #!/usr/bin/env -S deno run --allow-run --allow-read --allow-write --allow-env
 
 import { AutoBookmarkManager } from "./auto_bookmark.ts";
+import { detectBaseBranch } from "./base_detector.ts";
 import {
 	type CLIOptions,
 	parseArguments,
@@ -379,7 +380,7 @@ interface AppContext {
 	prManager: PullRequestManager;
 	autoBookmarkManager: AutoBookmarkManager;
 	descriptionGenerator: PRDescriptionGenerator;
-	options: CLIOptions;
+	options: CLIOptions & { baseBranch: string }; // baseBranch is guaranteed to be set
 }
 
 async function processStack(ctx: AppContext): Promise<void> {
@@ -482,12 +483,27 @@ async function main() {
 	handleValidationErrors(validateOptions(options));
 
 	const executor = new SystemCommandExecutor();
+	
+	// Auto-detect base branch if not provided
+	if (!options.baseBranch) {
+		const detectedBase = await detectBaseBranch(executor);
+		if (detectedBase) {
+			options.baseBranch = detectedBase;
+			console.log(`🔍 Auto-detected base branch: ${detectedBase}`);
+		} else {
+			// Fall back to "master" if auto-detection fails
+			options.baseBranch = "master";
+			console.log("⚠️  Could not auto-detect base branch, using 'master'");
+			console.log("   Use --base <branch> to specify a different base branch");
+		}
+	}
+	
 	const ctx: AppContext = {
 		executor,
 		prManager: new PullRequestManager(executor),
 		autoBookmarkManager: new AutoBookmarkManager(executor),
 		descriptionGenerator: new PRDescriptionGenerator(),
-		options,
+		options: options as CLIOptions & { baseBranch: string },
 	};
 
 	try {

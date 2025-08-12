@@ -1,7 +1,7 @@
 import { parse } from "@std/flags";
 
 export interface CLIOptions {
-	baseBranch: string;
+	baseBranch?: string;
 	autoBookmark: boolean;
 	keepAuto: boolean;
 	cleanupAllAuto: boolean;
@@ -24,7 +24,6 @@ export function parseArguments(args: string[]): CLIOptions {
 			b: "base",
 		},
 		default: {
-			base: "master",
 			"auto-bookmark": false,
 			"keep-auto": false,
 			"cleanup-all-auto": false,
@@ -34,7 +33,7 @@ export function parseArguments(args: string[]): CLIOptions {
 	});
 
 	return {
-		baseBranch: flags.base as string,
+		baseBranch: flags.base as string | undefined,
 		autoBookmark: flags["auto-bookmark"] as boolean,
 		keepAuto: flags["keep-auto"] as boolean,
 		cleanupAllAuto: flags["cleanup-all-auto"] as boolean,
@@ -51,10 +50,7 @@ export function validateOptions(options: CLIOptions): string[] {
 		errors.push("Cannot use --keep-auto and --cleanup-all-auto together");
 	}
 
-	// Validate base branch
-	if (!options.baseBranch || options.baseBranch.trim() === "") {
-		errors.push("Base branch cannot be empty");
-	}
+	// Base branch is now optional (will be auto-detected if not provided)
 
 	return errors;
 }
@@ -72,7 +68,7 @@ DESCRIPTION:
 
 OPTIONS:
   --base <branch>        Set the base branch for the bottom of the stack
-                        (default: master)
+                        (auto-detected from jj trunk() if not specified)
   
   --auto-bookmark       Automatically create bookmarks for unbookmarked
                         changes in the stack
