@@ -12,7 +12,7 @@ describe("Version utilities", () => {
 			assertEquals(version, "0.1.8");
 		});
 
-		it("should cache version after first read", async () => {
+		it("should return same version when called multiple times", async () => {
 			// Act - call twice
 			const version1 = await getVersion();
 			const version2 = await getVersion();
