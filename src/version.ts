@@ -2,11 +2,17 @@
  * Version utility for jj-stack-prs
  */
 
-// This will be set at compile time from deno.json
-const VERSION = "0.1.7";
-
 export async function getVersion(): Promise<string> {
-	return VERSION;
+	// Always read fresh from deno.json
+	const denoJsonPath = new URL("../deno.json", import.meta.url);
+	const content = await Deno.readTextFile(denoJsonPath);
+	const denoJson = JSON.parse(content);
+
+	if (!denoJson.version) {
+		throw new Error("No version field found in deno.json");
+	}
+
+	return denoJson.version;
 }
 
 export async function showVersion(): Promise<string> {

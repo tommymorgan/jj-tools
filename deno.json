@@ -1,5 +1,5 @@
 {
-	"version": "0.1.7",
+	"version": "0.1.8",
 	"tasks": {
 		"test": "deno test --allow-run --allow-read --allow-write --allow-env",
 		"test:watch": "deno test --allow-run --allow-read --allow-write --allow-env --watch",
@@ -12,6 +12,7 @@
 		"format:check": "npx @biomejs/biome@latest format .",
 		"check": "npx @biomejs/biome@latest check .",
 		"check:fix": "npx @biomejs/biome@latest check --fix .",
+		"check:version": "deno run --allow-read --allow-run --allow-env scripts/check-version-bump.ts",
 		"verify": "deno task typecheck && deno task lint && deno task test",
 		"ci": "deno task format:check && deno task verify"
 	},
