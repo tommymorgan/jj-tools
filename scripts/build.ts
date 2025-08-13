@@ -22,7 +22,7 @@ versionFileContent = versionFileContent.replace(
 // Write back the updated content
 await Deno.writeTextFile(versionFilePath, versionFileContent);
 
-console.log(`✓ Updated version to ${version}`);
+console.log(`✓ Set version to ${version}`);
 
 // Run the compile command
 const cmd = new Deno.Command("deno", {

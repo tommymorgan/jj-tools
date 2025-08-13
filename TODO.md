@@ -1,17 +1,9 @@
 # TODO List for jj-stack-prs
 
-## Immediate Tasks
+## Upcoming Tasks
 
-- [ ] Add --version flag to CLI
-
-## Code Improvements
-
-## Release Management
-
-- [ ] Exclude the binary from source control
-- [ ] Use GitHub Releases to distribute compiled binaries
-- [ ] Use GitHub Actions to build and release binaries automatically
+*(No pending tasks)*
 
 ---
 
-*Last Updated: 2025-08-12*
+*Last Updated: 2025-08-13*

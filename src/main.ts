@@ -51,13 +51,13 @@ class SystemCommandExecutor implements CommandExecutor {
 }
 
 // Helper functions to reduce complexity
-async function handleHelpAndVersion(options: CLIOptions): Promise<void> {
+function handleHelpAndVersion(options: CLIOptions): void {
 	if (options.help) {
 		safeLog(showHelp());
 		Deno.exit(0);
 	}
 	if (options.version) {
-		safeLog(await showVersion());
+		safeLog(showVersion());
 		Deno.exit(0);
 	}
 }
@@ -117,7 +117,7 @@ async function handleUnbookmarkedChanges(
 	options: CLIOptions,
 	autoBookmarkManager: AutoBookmarkManager,
 ): Promise<void> {
-	if (!options.autoBookmark) return;
+	if (options.noAutoBookmark) return;
 
 	safeLog("🔍 Checking for unbookmarked changes...");
 	const unbookmarked = await autoBookmarkManager.findUnbookmarkedChanges();
@@ -153,13 +153,13 @@ async function processUnbookmarkedChange(
 function validateStackBookmarks(stack: StackInfo, options: CLIOptions): void {
 	if (stack.bookmarks.length > 0) return;
 
-	if (!options.autoBookmark) {
+	if (options.noAutoBookmark) {
 		safeError("❌ No bookmarks found in current stack!");
 		safeError("\nCreate bookmarks for your changes. Examples:");
 		safeError("  jj bookmark create <name> -r @   # for current change");
 		safeError("  jj bookmark create <name> -r @-  # for previous change");
 		safeError("  jj bookmark create <name> -r @-- # for change before that");
-		safeError("\nOr use --auto-bookmark to automatically create bookmarks");
+		safeError("\nOr re-run without --no-auto-bookmark to automatically create bookmarks");
 		Deno.exit(1);
 	}
 
@@ -187,7 +187,15 @@ async function pushBookmarksToGitHub(
 
 	const pushResult = await executor.exec(["jj", "git", "push", "--all"]);
 	if (pushResult.code !== 0) {
-		safeError("❌ Failed to push bookmarks:", pushResult.stderr);
+		// Filter out non-tracking bookmark warnings to reduce noise
+		const lines = pushResult.stderr.split('\n');
+		const relevantErrors = lines.filter(line => {
+			// Keep lines that are NOT non-tracking bookmark warnings
+			return !line.includes('Non-tracking remote bookmark') &&
+			       !line.includes('Run `jj bookmark track');
+		});
+		
+		safeError("❌ Failed to push bookmarks:", relevantErrors.join('\n'));
 		Deno.exit(1);
 	}
 }
@@ -259,6 +267,7 @@ async function updateExistingPR(
 			prNumber: existingPR.number,
 			isDraft: existingPR.isDraft,
 			isReady: !existingPR.isDraft,
+			commitMessage: pr.title,
 		};
 	}
 
@@ -296,6 +305,7 @@ async function createNewPR(
 			prNumber,
 			isDraft,
 			isReady: !isDraft,
+			commitMessage: pr.title,
 		};
 	}
 
@@ -548,7 +558,7 @@ async function main() {
 	installBrokenPipeHandlers();
 
 	const options = parseArguments(Deno.args);
-	await handleHelpAndVersion(options);
+	handleHelpAndVersion(options);
 	handleValidationErrors(validateOptions(options));
 
 	const executor = new SystemCommandExecutor();

@@ -4,6 +4,7 @@ export interface PRChainInfo {
 	prNumber?: number;
 	isDraft: boolean;
 	isReady: boolean;
+	commitMessage?: string;
 }
 
 export interface PRDescriptionOptions {
@@ -15,7 +16,7 @@ export interface PRDescriptionOptions {
 
 export class PRDescriptionGenerator {
 	generateDescription(options: PRDescriptionOptions): string {
-		const { currentPR, fullChain, position, originalBody } = options;
+		const { currentPR, fullChain, position } = options;
 		const totalPRs = fullChain.length;
 
 		// Build header sections
@@ -35,10 +36,10 @@ export class PRDescriptionGenerator {
 			}
 		}
 
-		// Add original body if exists
-		if (originalBody) {
+		// Add commit message as the body
+		if (currentPR.commitMessage) {
 			sections.push("");
-			sections.push(originalBody);
+			sections.push(currentPR.commitMessage);
 		}
 
 		// Add separator
@@ -148,7 +149,7 @@ export class PRDescriptionGenerator {
 		}
 
 		if (isCurrent) {
-			return `${orderNumber}. **${line}** ← You are here`;
+			return `${orderNumber}. 👉 **You are here** 👉 **${line}**`;
 		} else {
 			return `${orderNumber}. ${line}`;
 		}

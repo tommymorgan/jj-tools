@@ -49,9 +49,16 @@ Feature: jj-stack-prs - Create GitHub PRs from Jujutsu stack
     And a new PR should be created for "update-2"
     And both PRs should have updated descriptions with the full chain
 
-  Scenario: Error when no bookmarks found in stack
+  Scenario: Auto-create bookmarks for unbookmarked changes by default
     Given I have changes without any bookmarks
     When I run "jj-stack-prs"
+    Then auto-bookmarks should be created for all unbookmarked changes
+    And the command should proceed with PR creation
+    And the output should show the auto-created bookmarks
+
+  Scenario: Error when no bookmarks and auto-bookmarking is disabled
+    Given I have changes without any bookmarks
+    When I run "jj-stack-prs --no-auto-bookmark"
     Then the command should exit with code 1
     And the error message should say "No bookmarks found in current stack!"
     And helpful instructions should be displayed:
@@ -60,6 +67,8 @@ Feature: jj-stack-prs - Create GitHub PRs from Jujutsu stack
         jj bookmark create <name> -r @   # for current change
         jj bookmark create <name> -r @-  # for previous change
         jj bookmark create <name> -r @-- # for change before that
+      
+      Or re-run without --no-auto-bookmark to automatically create bookmarks
       """
 
   Scenario: Push all bookmarks before creating PRs
@@ -81,7 +90,7 @@ Feature: jj-stack-prs - Create GitHub PRs from Jujutsu stack
     Then each bookmark should get its own PR
     And the stack should be properly ordered
 
-  Scenario: Update PR descriptions with chain visualization
+  Scenario: Update PR descriptions with commit messages and chain visualization
     Given I have a stack with 3 bookmarks and PRs are created
     When the PR descriptions are updated
     Then each PR description should contain:
@@ -89,8 +98,9 @@ Feature: jj-stack-prs - Create GitHub PRs from Jujutsu stack
       | Stack position            | "Stack position: X of Y"               |
       | Base branch               | "Base: `branch_name`"                  |
       | Dependencies              | "Depends on: `branch_name`" (if not bottom) |
-      | Full chain header         | "Full chain of PRs as of YYYY-MM-DD"   |
-      | Chain visualization       | Bulleted list with arrows              |
+      | Commit message            | The full commit message from jj            |
+      | Full chain header         | "PR Stack (review in order) as of YYYY-MM-DD" |
+      | Chain visualization       | Numbered list with PR details              |
       | Current PR highlighting   | Bold formatting for current PR         |
       | Footer                    | "Created with jj (Jujutsu) stack-prs"  |
 
@@ -252,13 +262,13 @@ Feature: jj-stack-prs - Create GitHub PRs from Jujutsu stack
       ✅ Updated PR #100 (kept as draft due to base change)
       """
 
-  Scenario: Auto-create bookmarks for unbookmarked changes
+  Scenario: Auto-create bookmarks for unbookmarked changes (default behavior)
     Given I have a stack with changes:
       | change_id | has_bookmark | description                    |
       | abc123    | yes         | feat: add authentication       |
       | def456    | no          | feat: add user profiles        |
       | ghi789    | yes         | feat: add user settings        |
-    When I run "jj-stack-prs --auto-bookmark"
+    When I run "jj-stack-prs"
     Then a temporary bookmark should be created for change "def456"
     And the auto-generated bookmark name should be based on the commit message
     And all 3 changes should have PRs created

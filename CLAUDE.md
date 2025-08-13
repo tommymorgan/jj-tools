@@ -2,6 +2,40 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+## 🚨 CRITICAL: Trunk-Based Development Workflow
+
+**This repository uses PURE trunk-based development. There are NO feature branches.**
+
+### Development Workflow
+1. All development happens directly on `main`
+2. Use jj for local version control and stacking changes
+3. NEVER create feature bookmarks for pushing to GitHub
+4. ALWAYS push only to `main` branch
+
+### How to Release
+
+**Releasing is simple: push to main and let the CD pipeline handle the rest.**
+
+```bash
+# Move main bookmark to current change
+jj bookmark set main -r @
+
+# Push to GitHub (this triggers the release pipeline)
+jj git push
+```
+
+The GitHub Actions CD pipeline will:
+1. Run all tests
+2. Build the binary
+3. Create a GitHub release with the compiled binary
+4. Tag the release with the version from deno.json
+
+### Pre-release Checklist
+- [ ] Run `deno task verify` to ensure all tests pass
+- [ ] Update version in `deno.json` if needed
+- [ ] Ensure commit message follows conventional commits
+- [ ] Verify no secrets or sensitive data in the commit
+
 ## Commands
 
 ### Development
@@ -94,17 +128,10 @@ This is a TypeScript/Deno CLI tool that creates GitHub PRs from Jujutsu (jj) ver
 
 Tests are organized by module in the `tests/` directory. The project uses Deno's built-in testing framework with BDD-style tests. Test files follow the pattern `*_test.ts` and use mock implementations of the CommandExecutor interface for isolation.
 
-### Known Issues (from BUGS.md)
-
-- **BUG-002**: "trunk" bookmark is not filtered (should be treated like "master")
-- **BUG-004**: Diamond/merge patterns are incorrectly linearized (only linear stacks are properly supported)
-- **BUG-003**: Manual bookmarks with `auto/` prefix are deleted during cleanup
-
 ## Important Notes
 
+- Known bugs and limitations are tracked in `BUGS.md`
 - The tool only supports linear stacks - diamond/merge patterns will be incorrectly handled
 - Requires GitHub CLI (`gh`) to be authenticated
 - Auto-bookmarks use the `auto/` prefix - avoid creating manual bookmarks with this prefix
 - The tool pushes all bookmarks to GitHub before creating PRs
-- Always run `deno task verify` before creating a new jj change.
-- Do not use jj bookmarks as feature branches.  This repo uses pure trunk-based development.  When pushing to GitHub push main.

@@ -2,7 +2,7 @@ import { parse } from "@std/flags";
 
 export interface CLIOptions {
 	baseBranch?: string;
-	autoBookmark: boolean;
+	noAutoBookmark: boolean;
 	keepAuto: boolean;
 	cleanupAllAuto: boolean;
 	help: boolean;
@@ -14,7 +14,7 @@ export function parseArguments(args: string[]): CLIOptions {
 	const flags = parse(args, {
 		string: ["base"],
 		boolean: [
-			"auto-bookmark",
+			"no-auto-bookmark",
 			"keep-auto",
 			"cleanup-all-auto",
 			"help",
@@ -27,7 +27,7 @@ export function parseArguments(args: string[]): CLIOptions {
 			b: "base",
 		},
 		default: {
-			"auto-bookmark": false,
+			"no-auto-bookmark": false,
 			"keep-auto": false,
 			"cleanup-all-auto": false,
 			help: false,
@@ -38,7 +38,7 @@ export function parseArguments(args: string[]): CLIOptions {
 
 	return {
 		baseBranch: flags.base as string | undefined,
-		autoBookmark: flags["auto-bookmark"] as boolean,
+		noAutoBookmark: flags["no-auto-bookmark"] as boolean,
 		keepAuto: flags["keep-auto"] as boolean,
 		cleanupAllAuto: flags["cleanup-all-auto"] as boolean,
 		help: flags.help as boolean,
@@ -75,8 +75,8 @@ OPTIONS:
   --base <branch>        Set the base branch for the bottom of the stack
                         (auto-detected from jj trunk() if not specified)
   
-  --auto-bookmark       Automatically create bookmarks for unbookmarked
-                        changes in the stack
+  --no-auto-bookmark    Disable automatic bookmark creation for unbookmarked
+                        changes (auto-bookmarking is enabled by default)
   
   --keep-auto           Skip automatic cleanup of auto/* bookmarks
   
@@ -89,14 +89,14 @@ OPTIONS:
   -v, --version         Show version information
 
 EXAMPLES:
-  # Create PRs for current stack
+  # Create PRs for current stack (auto-bookmarks unbookmarked changes)
   jj-stack-prs
   
   # Use a different base branch
   jj-stack-prs --base develop
   
-  # Auto-create bookmarks for unbookmarked changes
-  jj-stack-prs --auto-bookmark
+  # Disable auto-bookmarking
+  jj-stack-prs --no-auto-bookmark
   
   # Dry run to preview actions
   jj-stack-prs --dry-run

@@ -18,7 +18,7 @@ describe("CLI Parser", () => {
 
 			// Assert
 			assertEquals(options.baseBranch, undefined); // Now auto-detected
-			assertEquals(options.autoBookmark, false);
+			assertEquals(options.noAutoBookmark, false);
 			assertEquals(options.keepAuto, false);
 			assertEquals(options.cleanupAllAuto, false);
 			assertEquals(options.help, false);
@@ -36,15 +36,15 @@ describe("CLI Parser", () => {
 			assertEquals(options.baseBranch, "develop");
 		});
 
-		it("should parse auto-bookmark flag", () => {
+		it("should parse no-auto-bookmark flag", () => {
 			// Arrange
-			const args = ["--auto-bookmark"];
+			const args = ["--no-auto-bookmark"];
 
 			// Act
 			const options = parseArguments(args);
 
 			// Assert
-			assertEquals(options.autoBookmark, true);
+			assertEquals(options.noAutoBookmark, true);
 		});
 
 		it("should parse keep-auto flag", () => {
@@ -126,14 +126,14 @@ describe("CLI Parser", () => {
 
 		it("should parse multiple flags together", () => {
 			// Arrange
-			const args = ["--base", "main", "--auto-bookmark", "--dry-run"];
+			const args = ["--base", "main", "--no-auto-bookmark", "--dry-run"];
 
 			// Act
 			const options = parseArguments(args);
 
 			// Assert
 			assertEquals(options.baseBranch, "main");
-			assertEquals(options.autoBookmark, true);
+			assertEquals(options.noAutoBookmark, true);
 			assertEquals(options.dryRun, true);
 		});
 	});
@@ -143,7 +143,7 @@ describe("CLI Parser", () => {
 			// Arrange
 			const options: CLIOptions = {
 				baseBranch: "master",
-				autoBookmark: false,
+				noAutoBookmark: false,
 				keepAuto: false,
 				cleanupAllAuto: false,
 				help: false,
@@ -162,7 +162,7 @@ describe("CLI Parser", () => {
 			// Arrange
 			const options: CLIOptions = {
 				baseBranch: "master",
-				autoBookmark: false,
+				noAutoBookmark: false,
 				keepAuto: true,
 				cleanupAllAuto: true,
 				help: false,
@@ -185,7 +185,7 @@ describe("CLI Parser", () => {
 			// Arrange
 			const options: CLIOptions = {
 				baseBranch: undefined,
-				autoBookmark: false,
+				noAutoBookmark: false,
 				keepAuto: false,
 				cleanupAllAuto: false,
 				help: false,
@@ -215,7 +215,7 @@ describe("CLI Parser", () => {
 			);
 			assertEquals(helpText.includes("OPTIONS:"), true);
 			assertEquals(helpText.includes("--base"), true);
-			assertEquals(helpText.includes("--auto-bookmark"), true);
+			assertEquals(helpText.includes("--no-auto-bookmark"), true);
 			assertEquals(helpText.includes("--keep-auto"), true);
 			assertEquals(helpText.includes("--cleanup-all-auto"), true);
 			assertEquals(helpText.includes("--dry-run"), true);
@@ -230,7 +230,7 @@ describe("CLI Parser", () => {
 			// Assert
 			assertEquals(helpText.includes("jj-stack-prs"), true);
 			assertEquals(helpText.includes("jj-stack-prs --base develop"), true);
-			assertEquals(helpText.includes("jj-stack-prs --auto-bookmark"), true);
+			assertEquals(helpText.includes("jj-stack-prs --no-auto-bookmark"), true);
 		});
 	});
 });

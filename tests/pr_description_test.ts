@@ -18,6 +18,7 @@ describe("PR Description Generator", () => {
 					prNumber: 101,
 					isDraft: false,
 					isReady: true,
+					commitMessage: "feat: implement feature 1",
 				},
 				{
 					bookmark: "feature-2",
@@ -25,6 +26,7 @@ describe("PR Description Generator", () => {
 					prNumber: 102,
 					isDraft: true,
 					isReady: false,
+					commitMessage: "feat: implement feature 2",
 				},
 				{
 					bookmark: "feature-3",
@@ -32,6 +34,7 @@ describe("PR Description Generator", () => {
 					prNumber: 103,
 					isDraft: true,
 					isReady: false,
+					commitMessage: "feat: implement feature 3",
 				},
 			];
 
@@ -48,7 +51,7 @@ describe("PR Description Generator", () => {
 			// Assert
 			assertStringIncludes(description, "Stack position: 1 of 3");
 			assertStringIncludes(description, "Base: `master`");
-			assertStringIncludes(description, "Original PR description");
+			assertStringIncludes(description, "feat: implement feature 1");
 			// Bottom PR should not have "Depends on"
 			assertEquals(description.includes("Depends on:"), false);
 		});
@@ -63,6 +66,7 @@ describe("PR Description Generator", () => {
 					prNumber: 101,
 					isDraft: false,
 					isReady: true,
+					commitMessage: "feat: implement feature 1",
 				},
 				{
 					bookmark: "feature-2",
@@ -70,6 +74,7 @@ describe("PR Description Generator", () => {
 					prNumber: 102,
 					isDraft: true,
 					isReady: false,
+					commitMessage: "feat: implement feature 2",
 				},
 				{
 					bookmark: "feature-3",
@@ -77,6 +82,7 @@ describe("PR Description Generator", () => {
 					prNumber: 103,
 					isDraft: true,
 					isReady: false,
+					commitMessage: "feat: implement feature 3",
 				},
 			];
 
@@ -94,7 +100,7 @@ describe("PR Description Generator", () => {
 			assertStringIncludes(description, "Stack position: 2 of 3");
 			assertStringIncludes(description, "Base: `feature-1`");
 			assertStringIncludes(description, "Depends on: #101");
-			assertStringIncludes(description, "Feature 2 description");
+			assertStringIncludes(description, "feat: implement feature 2");
 		});
 
 		it("should include full chain visualization", () => {
@@ -142,7 +148,7 @@ describe("PR Description Generator", () => {
 			);
 			assertStringIncludes(
 				description,
-				"2. **PR #102: feature-2 → feature-1 (draft)** ← You are here",
+				"2. 👉 **You are here** 👉 **PR #102: feature-2 → feature-1 (draft)**",
 			);
 			assertStringIncludes(
 				description,
@@ -185,55 +191,12 @@ describe("PR Description Generator", () => {
 			// Current PR should be bold with "You are here" marker
 			assertStringIncludes(
 				description,
-				"1. **PR #201: fix-1 → develop (ready for review)** ← You are here",
+				"1. 👉 **You are here** 👉 **PR #201: fix-1 → develop (ready for review)**",
 			);
 			// Other PR should not be bold and not have the marker
 			assertStringIncludes(description, "2. PR #202: fix-2 → fix-1");
 		});
 
-		it("should preserve original body content", () => {
-			// Arrange
-			const generator = new PRDescriptionGenerator();
-			const chain: PRChainInfo[] = [
-				{
-					bookmark: "feature-1",
-					base: "master",
-					prNumber: 101,
-					isDraft: false,
-					isReady: true,
-				},
-			];
-
-			const originalBody = `## Summary
-This PR implements user authentication.
-
-## Changes
-- Added login endpoint
-- Added JWT token generation
-
-## Testing
-Run \`npm test\``;
-
-			const options: PRDescriptionOptions = {
-				currentPR: chain[0],
-				fullChain: chain,
-				position: 1,
-				originalBody,
-			};
-
-			// Act
-			const description = generator.generateDescription(options);
-
-			// Assert
-			assertStringIncludes(description, "## Summary");
-			assertStringIncludes(
-				description,
-				"This PR implements user authentication.",
-			);
-			assertStringIncludes(description, "- Added login endpoint");
-			assertStringIncludes(description, "- Added JWT token generation");
-			assertStringIncludes(description, "Run `npm test`");
-		});
 
 		it("should format date correctly in chain header", () => {
 			// Arrange
@@ -341,6 +304,97 @@ Created with jj (Jujutsu) stack-prs`;
 		});
 	});
 
+	describe("generateDescription with commit message", () => {
+		it("should replace PR body with commit message between stack metadata and chain visualization", () => {
+			// Arrange
+			const generator = new PRDescriptionGenerator();
+			const chain: PRChainInfo[] = [
+				{
+					bookmark: "feature-1",
+					base: "master",
+					prNumber: 101,
+					isDraft: false,
+					isReady: true,
+					commitMessage: "feat: add user authentication\n\nThis adds a new authentication system that supports:\n- Email/password login\n- OAuth integration\n- JWT token generation",
+				},
+				{
+					bookmark: "feature-2",
+					base: "feature-1",
+					prNumber: 102,
+					isDraft: true,
+					isReady: false,
+					commitMessage: "feat: add profile management",
+				},
+			];
+
+			const options: PRDescriptionOptions = {
+				currentPR: chain[0],
+				fullChain: chain,
+				position: 1,
+				originalBody: "This old content should be replaced", // Even with existing body
+			};
+
+			// Act
+			const description = generator.generateDescription(options);
+
+			// Assert
+			// Should include stack metadata
+			assertStringIncludes(description, "Stack position: 1 of 2");
+			assertStringIncludes(description, "Base: `master`");
+			
+			// Should include commit message as body
+			assertStringIncludes(description, "feat: add user authentication");
+			assertStringIncludes(description, "This adds a new authentication system");
+			assertStringIncludes(description, "- Email/password login");
+			assertStringIncludes(description, "- OAuth integration");
+			assertStringIncludes(description, "- JWT token generation");
+			
+			// Should include PR chain visualization
+			assertStringIncludes(description, "PR Stack (review in order)");
+			assertStringIncludes(description, "Created with jj (Jujutsu) stack-prs");
+			
+			// Should NOT include the old PR body
+			assertEquals(description.includes("This old content should be replaced"), false);
+		});
+
+		it("should include commit message in complete PR description even without body text", () => {
+			// Arrange
+			const generator = new PRDescriptionGenerator();
+			const chain: PRChainInfo[] = [
+				{
+					bookmark: "quick-fix",
+					base: "main",
+					prNumber: 201,
+					isDraft: false,
+					isReady: true,
+					commitMessage: "fix: resolve null pointer exception",
+				},
+			];
+
+			const options: PRDescriptionOptions = {
+				currentPR: chain[0],
+				fullChain: chain,
+				position: 1,
+				originalBody: "",
+			};
+
+			// Act
+			const description = generator.generateDescription(options);
+
+			// Assert
+			// Should include stack metadata
+			assertStringIncludes(description, "Stack position: 1 of 1");
+			assertStringIncludes(description, "Base: `main`");
+			
+			// Should include commit message
+			assertStringIncludes(description, "fix: resolve null pointer exception");
+			
+			// Should include chain visualization
+			assertStringIncludes(description, "PR Stack (review in order)");
+			assertStringIncludes(description, "Created with jj (Jujutsu) stack-prs");
+		});
+	});
+
 	describe("formatChainItem", () => {
 		it("should format chain item with PR number", () => {
 			// Arrange
@@ -380,7 +434,7 @@ Created with jj (Jujutsu) stack-prs`;
 			// Assert
 			assertEquals(
 				formatted,
-				"2. **PR #102: feature-2 → feature-1 (draft)** ← You are here",
+				"2. 👉 **You are here** 👉 **PR #102: feature-2 → feature-1 (draft)**",
 			);
 		});
 

@@ -4,32 +4,33 @@ import { getVersion, showVersion } from "../src/version.ts";
 
 describe("Version utilities", () => {
 	describe("getVersion", () => {
-		it("should return version from deno.json", async () => {
+		it("should return a valid semantic version string", () => {
 			// Act
-			const version = await getVersion();
+			const version = getVersion();
 
-			// Assert - we know it's 0.1.8 from deno.json
-			assertEquals(version, "0.1.8");
+			// Assert - should match semantic versioning pattern
+			const semverPattern = /^\d+\.\d+\.\d+$/;
+			assertEquals(semverPattern.test(version), true);
 		});
 
-		it("should return same version when called multiple times", async () => {
+		it("should return same version when called multiple times", () => {
 			// Act - call twice
-			const version1 = await getVersion();
-			const version2 = await getVersion();
+			const version1 = getVersion();
+			const version2 = getVersion();
 
 			// Assert - should return same value
 			assertEquals(version1, version2);
-			assertEquals(version1, "0.1.8");
 		});
 	});
 
 	describe("showVersion", () => {
-		it("should format version string correctly", async () => {
+		it("should include program name and version", () => {
 			// Act
-			const versionString = await showVersion();
+			const versionString = showVersion();
+			const version = getVersion();
 
 			// Assert
-			assertEquals(versionString, "jj-stack-prs version 0.1.8");
+			assertEquals(versionString, `jj-stack-prs version ${version}`);
 		});
 	});
 });
