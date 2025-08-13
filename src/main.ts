@@ -159,7 +159,9 @@ function validateStackBookmarks(stack: StackInfo, options: CLIOptions): void {
 		safeError("  jj bookmark create <name> -r @   # for current change");
 		safeError("  jj bookmark create <name> -r @-  # for previous change");
 		safeError("  jj bookmark create <name> -r @-- # for change before that");
-		safeError("\nOr re-run without --no-auto-bookmark to automatically create bookmarks");
+		safeError(
+			"\nOr re-run without --no-auto-bookmark to automatically create bookmarks",
+		);
 		Deno.exit(1);
 	}
 
@@ -188,14 +190,16 @@ async function pushBookmarksToGitHub(
 	const pushResult = await executor.exec(["jj", "git", "push", "--all"]);
 	if (pushResult.code !== 0) {
 		// Filter out non-tracking bookmark warnings to reduce noise
-		const lines = pushResult.stderr.split('\n');
-		const relevantErrors = lines.filter(line => {
+		const lines = pushResult.stderr.split("\n");
+		const relevantErrors = lines.filter((line) => {
 			// Keep lines that are NOT non-tracking bookmark warnings
-			return !line.includes('Non-tracking remote bookmark') &&
-			       !line.includes('Run `jj bookmark track');
+			return (
+				!line.includes("Non-tracking remote bookmark") &&
+				!line.includes("Run `jj bookmark track")
+			);
 		});
-		
-		safeError("❌ Failed to push bookmarks:", relevantErrors.join('\n'));
+
+		safeError("❌ Failed to push bookmarks:", relevantErrors.join("\n"));
 		Deno.exit(1);
 	}
 }

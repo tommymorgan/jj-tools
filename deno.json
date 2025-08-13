@@ -13,7 +13,7 @@
 		"check": "npx @biomejs/biome@latest check .",
 		"check:fix": "npx @biomejs/biome@latest check --fix .",
 		"check:version": "deno run --allow-read --allow-run --allow-env scripts/check-version-bump.ts",
-		"verify": "deno task typecheck && deno task lint && deno task test",
+		"verify": "deno task typecheck && deno task check && deno task test",
 		"ci": "deno task format:check && deno task verify"
 	},
 	"imports": {

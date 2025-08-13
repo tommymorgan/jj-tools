@@ -197,7 +197,6 @@ describe("PR Description Generator", () => {
 			assertStringIncludes(description, "2. PR #202: fix-2 → fix-1");
 		});
 
-
 		it("should format date correctly in chain header", () => {
 			// Arrange
 			const generator = new PRDescriptionGenerator();
@@ -315,7 +314,8 @@ Created with jj (Jujutsu) stack-prs`;
 					prNumber: 101,
 					isDraft: false,
 					isReady: true,
-					commitMessage: "feat: add user authentication\n\nThis adds a new authentication system that supports:\n- Email/password login\n- OAuth integration\n- JWT token generation",
+					commitMessage:
+						"feat: add user authentication\n\nThis adds a new authentication system that supports:\n- Email/password login\n- OAuth integration\n- JWT token generation",
 				},
 				{
 					bookmark: "feature-2",
@@ -341,20 +341,26 @@ Created with jj (Jujutsu) stack-prs`;
 			// Should include stack metadata
 			assertStringIncludes(description, "Stack position: 1 of 2");
 			assertStringIncludes(description, "Base: `master`");
-			
+
 			// Should include commit message as body
 			assertStringIncludes(description, "feat: add user authentication");
-			assertStringIncludes(description, "This adds a new authentication system");
+			assertStringIncludes(
+				description,
+				"This adds a new authentication system",
+			);
 			assertStringIncludes(description, "- Email/password login");
 			assertStringIncludes(description, "- OAuth integration");
 			assertStringIncludes(description, "- JWT token generation");
-			
+
 			// Should include PR chain visualization
 			assertStringIncludes(description, "PR Stack (review in order)");
 			assertStringIncludes(description, "Created with jj (Jujutsu) stack-prs");
-			
+
 			// Should NOT include the old PR body
-			assertEquals(description.includes("This old content should be replaced"), false);
+			assertEquals(
+				description.includes("This old content should be replaced"),
+				false,
+			);
 		});
 
 		it("should include commit message in complete PR description even without body text", () => {
@@ -385,10 +391,10 @@ Created with jj (Jujutsu) stack-prs`;
 			// Should include stack metadata
 			assertStringIncludes(description, "Stack position: 1 of 1");
 			assertStringIncludes(description, "Base: `main`");
-			
+
 			// Should include commit message
 			assertStringIncludes(description, "fix: resolve null pointer exception");
-			
+
 			// Should include chain visualization
 			assertStringIncludes(description, "PR Stack (review in order)");
 			assertStringIncludes(description, "Created with jj (Jujutsu) stack-prs");
