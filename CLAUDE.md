@@ -10,7 +10,8 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 1. All development happens directly on `main`
 2. Use jj for local version control and stacking changes
 3. NEVER create feature bookmarks for pushing to GitHub
-4. ALWAYS push only to `main` branch
+4. ALWAYS run `deno task verify` before pushing to ensure all tests pass
+5. ALWAYS push only to `main` branch
 
 ### How to Release
 
