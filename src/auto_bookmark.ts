@@ -43,10 +43,36 @@ function parseLogLine(
 	return { changeId, hasBookmarks: !!bookmarksPart };
 }
 
+async function isEmptyCommit(
+	executor: CommandExecutor,
+	changeId: string,
+): Promise<boolean> {
+	const emptyResult = await executor.exec([
+		"jj",
+		"show",
+		"-r",
+		changeId,
+		"--template",
+		"empty",
+	]);
+
+	if (emptyResult.code !== 0) {
+		return false;
+	}
+
+	return emptyResult.stdout.trim() === "true";
+}
+
 async function getChangeDescription(
 	executor: CommandExecutor,
 	changeId: string,
 ): Promise<UnbookmarkedChange | null> {
+	// Skip empty commits
+	const isEmpty = await isEmptyCommit(executor, changeId);
+	if (isEmpty) {
+		return null;
+	}
+
 	const descResult = await executor.exec([
 		"jj",
 		"show",

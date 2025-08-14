@@ -77,8 +77,8 @@ jj-stack-prs
 # Use a different base branch
 jj-stack-prs --base develop
 
-# Auto-create bookmarks for unbookmarked changes
-jj-stack-prs --auto-bookmark
+# Disable auto-created bookmarks for unbookmarked changes
+jj-stack-prs --no-auto-bookmark
 
 # Preview what would be done
 jj-stack-prs --dry-run

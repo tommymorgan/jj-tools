@@ -11,7 +11,9 @@ import {
 } from "../src/auto_bookmark.ts";
 import type { CommandExecutor } from "../src/stack_detection.ts";
 
-function createMockResponse(stdout: string, stderr = "", code = 0) {
+type Response = { stdout: string; stderr: string; code: number };
+
+function createMockResponse(stdout: string, stderr = "", code = 0): Response {
 	return { stdout, stderr, code };
 }
 
@@ -22,18 +24,27 @@ function handleLogCommand(cmd: string[], logOutput: string) {
 	return null;
 }
 
+function isEmptyCommitCheck(cmd: string[]): boolean {
+	return cmd.includes("show") && cmd.includes("empty");
+}
+
+function getEmptyCheckResponse(cmd: string[]): Response {
+	// def456 is our designated empty commit for testing
+	return createMockResponse(cmd.includes("def456") ? "true" : "false");
+}
+
 function handleShowCommand(
 	cmd: string[],
 	changeIdToMessageMap: Record<string, string>,
 ) {
-	if (!cmd.includes("show")) {
-		return null;
-	}
+	if (!cmd.includes("show")) return null;
 
+	// Handle empty check first
+	if (isEmptyCommitCheck(cmd)) return getEmptyCheckResponse(cmd);
+
+	// Handle description requests
 	for (const [changeId, message] of Object.entries(changeIdToMessageMap)) {
-		if (cmd.includes(changeId)) {
-			return createMockResponse(message);
-		}
+		if (cmd.includes(changeId)) return createMockResponse(message);
 	}
 
 	return null;
@@ -219,6 +230,35 @@ def456 feature-2`;
 
 			// Assert
 			assertEquals(unbookmarked.length, 0);
+		});
+
+		it("should skip empty commits when finding unbookmarked changes", async () => {
+			// Arrange
+			const logOutput = `abc123  
+def456  
+ghi789  `;
+
+			const showMap: Record<string, string> = {
+				abc123: "feat: add new feature",
+				def456: "fix: empty commit that should be skipped",
+				ghi789: "docs: update readme",
+			};
+
+			// Use the existing helper which now handles empty checks
+			const mockExecutor = createFindUnbookmarkedMockExecutor(
+				logOutput,
+				showMap,
+			);
+
+			// Act
+			const result = await findUnbookmarkedChanges(mockExecutor);
+
+			// Assert - should only return non-empty commits (def456 is empty)
+			assertEquals(result.length, 2);
+			assertEquals(result[0].changeId, "abc123");
+			assertEquals(result[0].description, "feat: add new feature");
+			assertEquals(result[1].changeId, "ghi789");
+			assertEquals(result[1].description, "docs: update readme");
 		});
 	});
 
