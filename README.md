@@ -249,11 +249,8 @@ Created by [Tommy Morgan](https://github.com/tommymorgan)
 
 Built with:
 - [Deno](https://deno.land/) - Runtime and tooling
-- [Jujutsu](https://github.com/martinvonz/jj) - Version control system
-- [GitHub CLI](https://cli.github.com/) - GitHub interaction
 
 ## Related Projects
 
-- [jj](https://github.com/martinvonz/jj) - The Jujutsu version control system
+- [jj](https://jj-vcs.github.io/jj/latest/) - The Jujutsu version control system
 - [gh-stack](https://github.com/timothyandrew/gh-stack) - Similar tool for git
-- [git-stack](https://github.com/magus/git-stack) - Another stacked PR tool for git

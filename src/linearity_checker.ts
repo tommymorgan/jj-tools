@@ -128,7 +128,7 @@ function parseDivergentCommits(output: string): string[] {
 
 	for (const line of lines) {
 		const [changeId, childCount] = line.split(" ");
-		if (childCount && Number.parseInt(childCount) > 1) {
+		if (childCount && Number.parseInt(childCount, 10) > 1) {
 			divergentCommits.push(`${changeId} (${childCount} children)`);
 		}
 	}
