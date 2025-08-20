@@ -91,15 +91,16 @@ describe("CLI Parser", () => {
 			assertEquals(options.version, true);
 		});
 
-		it("should parse version flag short form", () => {
+		it("should parse verbose flag", () => {
 			// Arrange
-			const args = ["-v"];
+			const args = ["--verbose"];
 
 			// Act
 			const options = parseArguments(args);
 
 			// Assert
-			assertEquals(options.version, true);
+			assertEquals(options.verbose, true);
+			assertEquals(options.version, false);
 		});
 
 		it("should parse help flag", () => {
@@ -149,6 +150,7 @@ describe("CLI Parser", () => {
 				help: false,
 				version: false,
 				dryRun: false,
+				verbose: false,
 			};
 
 			// Act
@@ -168,6 +170,7 @@ describe("CLI Parser", () => {
 				help: false,
 				version: false,
 				dryRun: false,
+				verbose: false,
 			};
 
 			// Act
@@ -191,6 +194,7 @@ describe("CLI Parser", () => {
 				help: false,
 				version: false,
 				dryRun: false,
+				verbose: false,
 			};
 
 			// Act

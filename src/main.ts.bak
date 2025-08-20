@@ -17,14 +17,6 @@ import {
 } from "./cli.ts";
 import { checkStackLinearity } from "./linearity_checker.ts";
 import {
-	error,
-	output,
-	progress,
-	setVerboseMode,
-	summary,
-	verbose,
-} from "./output.ts";
-import {
 	extractOriginalBody,
 	generateDescription,
 	type PRChainInfo,
@@ -42,7 +34,11 @@ import {
 	type PRStackInfo,
 	reconcilePRBookmarks,
 } from "./pr_stack_detector.ts";
-import { installBrokenPipeHandlers, safeLog } from "./safe_output.ts";
+import {
+	installBrokenPipeHandlers,
+	safeError,
+	safeLog,
+} from "./safe_output.ts";
 import {
 	type CommandExecutor,
 	detectStack,
@@ -90,9 +86,9 @@ function handleHelpAndVersion(options: CLIOptions): void {
 
 function handleValidationErrors(errors: string[]): void {
 	if (errors.length > 0) {
-		error("Error: Invalid options");
-		for (const err of errors) {
-			error(`  ${err}`);
+		safeError("❌ Invalid options:");
+		for (const error of errors) {
+			safeError(`  - ${error}`);
 		}
 		Deno.exit(1);
 	}
@@ -104,7 +100,7 @@ async function cleanupAutoBookmarks(
 ): Promise<void> {
 	if (options.keepAuto) return;
 
-	verbose("Cleaning up auto-bookmarks...");
+	safeLog("🧹 Cleaning up auto-bookmarks...");
 	const autoBookmarks = await findAutoBookmarks(executor);
 
 	if (options.cleanupAllAuto) {
@@ -123,7 +119,7 @@ async function forceCleanupAllAutoBookmarks(
 		if (!options.dryRun) {
 			await executor.exec(["jj", "bookmark", "delete", bookmark]);
 		}
-		verbose(`  Deleted: ${bookmark}`);
+		safeLog(`  - Deleted: ${bookmark}`);
 	}
 }
 
@@ -136,7 +132,7 @@ async function cleanupMergedAutoBookmarksWrapper(
 		autoBookmarks,
 	);
 	for (const deleted of cleanupResult.deleted) {
-		verbose(`  ${deleted}: PR merged/closed, deleted`);
+		safeLog(`  - ${deleted}: PR merged/closed ✓ deleted`);
 	}
 }
 
@@ -146,12 +142,12 @@ async function handleUnbookmarkedChanges(
 ): Promise<void> {
 	if (options.noAutoBookmark) return;
 
-	verbose("Checking for unbookmarked changes...");
+	safeLog("🔍 Checking for unbookmarked changes...");
 	const unbookmarked = await findUnbookmarkedChanges(executor);
 
 	if (unbookmarked.length === 0) return;
 
-	verbose(`Found ${unbookmarked.length} unbookmarked change(s)`);
+	safeLog(`⚠️  Found ${unbookmarked.length} unbookmarked change(s)`);
 
 	for (const change of unbookmarked) {
 		await processUnbookmarkedChange(change, options, executor);
@@ -163,17 +159,17 @@ async function processUnbookmarkedChange(
 	options: CLIOptions,
 	executor: CommandExecutor,
 ): Promise<void> {
-	verbose(`  ${change.changeId}: ${change.description}`);
+	safeLog(`  - ${change.changeId}: ${change.description}`);
 
 	if (!options.dryRun) {
 		const autoBookmark = await createAutoBookmark(executor, change);
-		verbose(`  Created auto-bookmark: ${autoBookmark.name}`);
+		safeLog(`  🔖 Created auto-bookmark: ${autoBookmark.name}`);
 	} else {
 		const bookmarkName = generateBookmarkName(
 			change.description,
 			change.changeId,
 		);
-		verbose(`  Would create: ${bookmarkName}`);
+		safeLog(`  🔖 Would create: ${bookmarkName}`);
 	}
 }
 
@@ -181,17 +177,25 @@ function validateStackBookmarks(stack: StackInfo, options: CLIOptions): void {
 	if (stack.bookmarks.length > 0) return;
 
 	if (options.noAutoBookmark) {
-		error("Error: No bookmarks found in stack");
-		error("Create bookmarks with: jj bookmark create <name> -r @");
+		safeError("❌ No bookmarks found in current stack!");
+		safeError("\nCreate bookmarks for your changes. Examples:");
+		safeError("  jj bookmark create <name> -r @   # for current change");
+		safeError("  jj bookmark create <name> -r @-  # for previous change");
+		safeError("  jj bookmark create <name> -r @-- # for change before that");
+		safeError(
+			"\nOr re-run without --no-auto-bookmark to automatically create bookmarks",
+		);
 		Deno.exit(1);
 	}
 
 	if (options.dryRun) {
-		verbose("Dry run complete. Would have created auto-bookmarks and PRs.");
+		safeLog(
+			"\n✨ Dry run complete. Would have created auto-bookmarks and PRs.",
+		);
 		Deno.exit(0);
 	}
 
-	error("Error: No bookmarks found after auto-bookmark creation");
+	safeError("❌ No bookmarks found after auto-bookmark creation!");
 	Deno.exit(1);
 }
 
@@ -199,10 +203,10 @@ async function pushBookmarksToGitHub(
 	options: CLIOptions,
 	executor: CommandExecutor,
 ): Promise<void> {
-	output("Pushing to GitHub...");
+	safeLog("🚀 Pushing bookmarks to GitHub...");
 
 	if (options.dryRun) {
-		verbose("  (dry-run: would push all bookmarks)");
+		safeLog("  (dry-run: would push all bookmarks)");
 		return;
 	}
 
@@ -218,7 +222,7 @@ async function pushBookmarksToGitHub(
 			);
 		});
 
-		error(`Error: Failed to push bookmarks: ${relevantErrors.join(" ")}`);
+		safeError("❌ Failed to push bookmarks:", relevantErrors.join("\n"));
 		Deno.exit(1);
 	}
 }
@@ -266,15 +270,12 @@ async function updateExistingPR(
 	const existingPR = pr.existingPR;
 	if (!existingPR) {
 		// This shouldn't happen as this function is only called when existingPR exists
-		error(`  No existing PR found for ${pr.bookmark}`);
+		safeError(`  ❌ No existing PR found for ${pr.bookmark}`);
 		return null;
 	}
 
-	progress(
-		prCount,
-		totalPRs,
-		`Updating PR #${existingPR.number}:`,
-		`${pr.bookmark} → ${pr.base}`,
+	safeLog(
+		`[${prCount}/${totalPRs}] 🔄 Updating PR #${existingPR.number}: ${pr.bookmark} → ${pr.base}`,
 	);
 
 	if (!options.dryRun) {
@@ -283,9 +284,10 @@ async function updateExistingPR(
 				prNumber: existingPR.number,
 				base: pr.base,
 			});
-			verbose(`  Updated base: ${existingPR.baseRefName} → ${pr.base}`);
+			safeLog(`  📝 Updated base: ${existingPR.baseRefName} → ${pr.base}`);
 		}
 
+		safeLog(`  ✅ Updated PR #${existingPR.number}`);
 		return {
 			bookmark: pr.bookmark,
 			base: pr.base,
@@ -296,6 +298,7 @@ async function updateExistingPR(
 		};
 	}
 
+	safeLog(`  ✅ Updated PR #${existingPR.number}`);
 	return null;
 }
 
@@ -307,7 +310,9 @@ async function createNewPR(
 	executor: CommandExecutor,
 	isDraft: boolean,
 ): Promise<PRChainInfo | null> {
-	progress(prCount, totalPRs, `Creating PR:`, `${pr.bookmark} → ${pr.base}`);
+	safeLog(
+		`[${prCount}/${totalPRs}] 🆕 Creating PR: ${pr.bookmark} → ${pr.base}`,
+	);
 
 	if (!options.dryRun) {
 		const prNumber = await createPR(executor, {
@@ -318,11 +323,8 @@ async function createNewPR(
 			draft: isDraft,
 		});
 
-		if (!isDraft) {
-			output(`Creating PR #${prNumber}: ${pr.bookmark} → ${pr.base}`);
-		} else {
-			output(`Creating PR #${prNumber}: ${pr.bookmark} → ${pr.base} (draft)`);
-		}
+		const status = isDraft ? "draft" : "ready for review";
+		safeLog(`  ✅ Created PR #${prNumber} (${status})`);
 
 		return {
 			bookmark: pr.bookmark,
@@ -334,7 +336,7 @@ async function createNewPR(
 		};
 	}
 
-	verbose(`  (dry-run: would create ${isDraft ? "draft" : "ready"} PR)`);
+	safeLog(`  (dry-run: would create ${isDraft ? "draft" : "ready"} PR)`);
 	return null;
 }
 
@@ -342,7 +344,7 @@ async function updatePRDescriptions(
 	createdPRs: PRChainInfo[],
 	executor: CommandExecutor,
 ): Promise<void> {
-	verbose("Updating PR descriptions...");
+	safeLog("📝 Updating PR descriptions...");
 
 	for (let i = 0; i < createdPRs.length; i++) {
 		const pr = createdPRs[i];
@@ -401,7 +403,16 @@ function showSummary(
 	const readyCount = createdPRs.filter((pr) => pr.isReady).length;
 	const draftCount = createdPRs.filter((pr) => pr.isDraft).length;
 
-	summary(createdCount, updatedCount, readyCount, draftCount);
+	safeLog("\n📊 Summary:");
+	if (createdCount > 0) safeLog(`  • Created: ${createdCount} new PR(s)`);
+	if (updatedCount > 0) safeLog(`  • Updated: ${updatedCount} existing PR(s)`);
+	safeLog(`  • Ready for review: ${readyCount}`);
+	safeLog(`  • Drafts: ${draftCount}`);
+
+	safeLog("\nView your stack:");
+	safeLog("  gh pr list --author @me --state open");
+	safeLog("\nView in browser:");
+	safeLog("  gh pr list --author @me --state open --web");
 }
 
 interface AppContext {
@@ -429,15 +440,15 @@ async function processStack(ctx: AppContext): Promise<void> {
 	await processPRs(ctx, stack);
 }
 
-function handleReconcileFailure(err: string | undefined): never {
-	const errorMessage = err || "Unknown error";
-	error(`Error: Failed to reconcile remote bookmarks: ${errorMessage}`);
+function handleReconcileFailure(error: string | undefined): never {
+	const errorMessage = error || "Unknown error";
+	safeError(`❌ Failed to reconcile remote bookmarks: ${errorMessage}`);
 	Deno.exit(1);
 }
 
 function handleDryRunSuccess(): never {
-	verbose("Would have successfully created PR stack after reconciliation");
-	verbose("(This was a dry run - no changes were made)");
+	safeLog("\n✅ Would have successfully created PR stack after reconciliation");
+	safeLog("(This was a dry run - no changes were made)");
 	Deno.exit(0);
 }
 
@@ -466,7 +477,7 @@ async function handleRemoteBookmarksIfNeeded(ctx: AppContext): Promise<void> {
 		return;
 	}
 
-	output(`Created ${count} local bookmark(s) tracking remotes`);
+	safeLog(`✅ Created ${count} local bookmark(s) tracking remotes`);
 
 	if (ctx.options.dryRun) {
 		handleDryRunSuccess();
@@ -474,7 +485,7 @@ async function handleRemoteBookmarksIfNeeded(ctx: AppContext): Promise<void> {
 }
 
 async function detectAndValidateStack(ctx: AppContext): Promise<StackInfo> {
-	verbose("Detecting stack...");
+	safeLog("🔍 Detecting stack...");
 
 	// Check for non-linear stacks (BUG-004)
 	await ensureLinearStack(ctx.executor);
@@ -484,36 +495,36 @@ async function detectAndValidateStack(ctx: AppContext): Promise<StackInfo> {
 
 	const stack = await detectStack(ctx.executor, ctx.options.baseBranch);
 	validateStackBookmarks(stack, ctx.options);
-	output(`Detecting stack: ${stack.bookmarks.length} bookmarks`);
+	safeLog(`📚 Found stack with ${stack.bookmarks.length} bookmark(s)`);
 	return stack;
 }
 
 function logPRStack(prStackInfo: PRStackInfo): void {
-	output("Detected PR stack with missing local bookmarks");
-	verbose(
-		"This typically happens when you switch computers after pushing a stack.",
+	safeLog("\n⚠️  Detected PR stack with missing local bookmarks!");
+	safeLog(
+		"  This typically happens when you switch computers after pushing a stack.",
 	);
 
 	if (prStackInfo.prs.length === 0) {
 		return;
 	}
 
-	verbose("PR Stack found:");
+	safeLog("\n  PR Stack found:");
 	prStackInfo.prs.forEach((pr, i) => {
 		const hasLocal = prStackInfo.existingLocalBookmarks.includes(
 			pr.headRefName,
 		);
 		const status = hasLocal ? "✅" : "❌ missing";
-		verbose(
-			`  ${i + 1}. #${pr.number}: ${pr.headRefName} → ${pr.baseRefName} ${status}`,
+		safeLog(
+			`    ${i + 1}. #${pr.number}: ${pr.headRefName} → ${pr.baseRefName} ${status}`,
 		);
 	});
 }
 
 function logMissingBookmarks(bookmarks: string[]): void {
-	verbose(`Missing ${bookmarks.length} local bookmark(s):`);
+	safeLog(`\n  Missing ${bookmarks.length} local bookmark(s):`);
 	for (const bookmark of bookmarks) {
-		verbose(`  ${bookmark}`);
+		safeLog(`    - ${bookmark}`);
 	}
 }
 
@@ -534,14 +545,16 @@ async function handlePRDetection(
 	logMissingBookmarks(prStackInfo.missingLocalBookmarks);
 
 	if (dryRun) {
-		verbose("DRY RUN: Would create local bookmarks tracking these remotes");
+		safeLog(
+			"\n  🔍 DRY RUN: Would create local bookmarks tracking these remotes",
+		);
 		return {
 			success: true,
 			reconciledBookmarks: prStackInfo.missingLocalBookmarks,
 		};
 	}
 
-	output("Creating local bookmarks to track remotes...");
+	safeLog("\n  Creating local bookmarks to track remotes...");
 	const result = await reconcilePRBookmarks(
 		executor,
 		prStackInfo.missingLocalBookmarks,
@@ -570,14 +583,16 @@ async function handleFallbackDetection(
 		return { success: true, reconciledBookmarks: [] };
 	}
 
-	output("Detected remote-only bookmarks in the stack");
-	verbose("Remote bookmarks found:");
+	safeLog("\n⚠️  Detected remote-only bookmarks in the stack!");
+	safeLog("  Remote bookmarks found:");
 	for (const remote of stackInfo.remoteBookmarks) {
-		verbose(`  ${remote.name}@${remote.remote}`);
+		safeLog(`    - ${remote.name}@${remote.remote}`);
 	}
 
 	if (dryRun) {
-		verbose("DRY RUN: Would create local bookmarks tracking these remotes");
+		safeLog(
+			"\n  🔍 DRY RUN: Would create local bookmarks tracking these remotes",
+		);
 		return {
 			success: true,
 			reconciledBookmarks: stackInfo.remoteBookmarks.map((r) => r.name),
@@ -616,20 +631,23 @@ async function ensureLinearStack(executor: CommandExecutor): Promise<void> {
 		return;
 	}
 
-	error(`Error: ${linearityCheck.message}`);
+	safeError(`❌ ${linearityCheck.message}`);
 	if (linearityCheck.problematicCommits.length > 0) {
-		error("  Problematic commits:");
+		safeError("  Problematic commits:");
 		for (const commit of linearityCheck.problematicCommits) {
-			error(`    ${commit}`);
+			safeError(`    - ${commit}`);
 		}
 	}
-	error("This tool only supports linear stacks");
-	error("Resolve merge commits or divergent branches first");
+	safeError("\n⚠️  This tool only supports linear stacks!");
+	safeError(
+		"  Please resolve merge commits or divergent branches before using jj-stack-prs.",
+	);
+	safeError("  You can use 'jj rebase' to linearize your stack.");
 	Deno.exit(1);
 }
 
 async function checkForConflicts(ctx: AppContext): Promise<void> {
-	verbose("Checking for conflicts...");
+	safeLog("🔍 Checking for conflicts...");
 
 	const conflictCheck = await hasConflicts(
 		ctx.executor,
@@ -640,20 +658,24 @@ async function checkForConflicts(ctx: AppContext): Promise<void> {
 		return;
 	}
 
-	error("Error: Cannot create PRs - found conflicts in the stack");
-	error("Conflicted commits:");
+	safeError("❌ Cannot create PRs: Found conflicts in the stack");
+	safeError("\n  Conflicted commits:");
 	for (const conflict of conflictCheck.conflictedCommits) {
-		error(
-			`  ${conflict.changeId} (${conflict.bookmark}): ${conflict.description}`,
+		safeError(
+			`    - ${conflict.changeId} (${conflict.bookmark}): ${conflict.description}`,
 		);
 	}
-	error("Jujutsu cannot push commits with conflicts to GitHub");
-	error("Resolve conflicts with: jj edit <change-id>");
+	safeError("\n⚠️  Jujutsu cannot push commits with conflicts to GitHub.");
+	safeError("  Please resolve the conflicts before running jj-stack-prs.");
+	safeError("\n  To resolve conflicts:");
+	safeError("    1. Edit the conflicted commit: jj edit <change-id>");
+	safeError("    2. Resolve the conflicts in the affected files");
+	safeError("    3. Mark as resolved: jj squash or jj diffedit");
 	Deno.exit(1);
 }
 
 async function processPRs(ctx: AppContext, stack: StackInfo): Promise<void> {
-	verbose("Building PR chain...");
+	safeLog("🔗 Building PR chain...");
 	const existingPRs = await findExistingPRs(ctx.executor, stack.bookmarks);
 	const prChain = buildPRChain(
 		stack.bookmarks,
@@ -701,10 +723,13 @@ async function finalizePRs(
 	}
 }
 
-function handleError(err: unknown, options: CLIOptions): void {
-	error(`Error: ${err instanceof Error ? err.message : String(err)}`);
+function handleError(error: unknown, options: CLIOptions): void {
+	safeError(
+		"❌ Error:",
+		error instanceof Error ? error.message : String(error),
+	);
 	if (options.dryRun) {
-		verbose("(This was a dry run - no changes were made)");
+		safeError("(This was a dry run - no changes were made)");
 	}
 	Deno.exit(1);
 }
@@ -714,10 +739,6 @@ async function main() {
 	installBrokenPipeHandlers();
 
 	const options = parseArguments(Deno.args);
-
-	// Set verbose mode if requested
-	setVerboseMode(options.verbose);
-
 	handleHelpAndVersion(options);
 	handleValidationErrors(validateOptions(options));
 
@@ -731,12 +752,12 @@ async function main() {
 		const detectedBase = await detectBaseBranch(executor);
 		if (detectedBase) {
 			options.baseBranch = detectedBase;
-			verbose(`Auto-detected base branch: ${detectedBase}`);
+			safeLog(`🔍 Auto-detected base branch: ${detectedBase}`);
 		} else {
 			// Fall back to "master" if auto-detection fails
 			options.baseBranch = "master";
-			verbose("Could not auto-detect base branch, using 'master'");
-			verbose("Use --base <branch> to specify a different base branch");
+			safeLog("⚠️  Could not auto-detect base branch, using 'master'");
+			safeLog("   Use --base <branch> to specify a different base branch");
 		}
 	}
 

@@ -2,6 +2,9 @@
 
 import { parse as parseVersion } from "@std/semver";
 
+// Check for verbose flag
+const VERBOSE = Deno.args.includes("--verbose") || Deno.args.includes("-v");
+
 interface CommandResult {
 	stdout: string;
 	stderr: string;
@@ -31,18 +34,18 @@ async function getCurrentVersion(): Promise<string> {
 
 async function getPreviousMainVersion(): Promise<string | null> {
 	// First try to get version from main@origin
-	console.log("📖 Checking previous main version...");
+	if (VERBOSE) console.log("Checking previous main version...");
 	
 	let result = await exec(["jj", "cat", "-r", "main@origin", "deno.json"]);
 	
 	if (result.code !== 0) {
 		// If main@origin doesn't exist, try the parent commit
-		console.log("  No main@origin found, checking parent commit...");
+		if (VERBOSE) console.log("  No main@origin found, checking parent commit...");
 		result = await exec(["jj", "cat", "-r", "@-", "deno.json"]);
 		
 		if (result.code !== 0) {
 			// This might be the first commit
-			console.log("  No previous version found (first release?)");
+			if (VERBOSE) console.log("  No previous version found (first release?)");
 			return null;
 		}
 	}
@@ -51,7 +54,7 @@ async function getPreviousMainVersion(): Promise<string | null> {
 		const previousDenoJson = JSON.parse(result.stdout);
 		return previousDenoJson.version;
 	} catch (e) {
-		console.error("  Failed to parse previous deno.json:", e);
+		if (VERBOSE) console.error("  Failed to parse previous deno.json:", e);
 		return null;
 	}
 }
@@ -76,7 +79,7 @@ async function hasUncommittedChanges(): Promise<boolean> {
 }
 
 async function amendCommit(): Promise<void> {
-	console.log("📝 Amending commit with version bump...");
+	if (VERBOSE) console.log("Amending commit with version bump...");
 	const result = await exec(["jj", "amend"]);
 	if (result.code !== 0) {
 		throw new Error(`Failed to amend commit: ${result.stderr}`);
@@ -89,7 +92,7 @@ async function isOnMainBookmark(): Promise<boolean> {
 }
 
 async function moveMainBookmark(): Promise<void> {
-	console.log("🔖 Moving main bookmark to current commit...");
+	if (VERBOSE) console.log("Moving main bookmark to current commit...");
 	const result = await exec(["jj", "bookmark", "set", "main", "-r", "@"]);
 	if (result.code !== 0) {
 		throw new Error(`Failed to move main bookmark: ${result.stderr}`);
@@ -107,12 +110,12 @@ async function isEmptyCommit(): Promise<boolean> {
 }
 
 async function pushToGitHub(): Promise<void> {
-	console.log("🚀 Pushing to GitHub...");
+	if (VERBOSE) console.log("Pushing to GitHub...");
 	const result = await exec(["jj", "git", "push"]);
 	if (result.code !== 0) {
 		throw new Error(`Failed to push: ${result.stderr}`);
 	}
-	console.log(result.stdout);
+	if (VERBOSE) console.log(result.stdout);
 }
 
 async function main() {

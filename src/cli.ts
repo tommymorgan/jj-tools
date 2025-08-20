@@ -8,6 +8,7 @@ export interface CLIOptions {
 	help: boolean;
 	version: boolean;
 	dryRun: boolean;
+	verbose: boolean;
 }
 
 export function parseArguments(args: string[]): CLIOptions {
@@ -20,10 +21,10 @@ export function parseArguments(args: string[]): CLIOptions {
 			"help",
 			"version",
 			"dry-run",
+			"verbose",
 		],
 		alias: {
 			h: "help",
-			v: "version",
 			b: "base",
 		},
 		default: {
@@ -33,6 +34,7 @@ export function parseArguments(args: string[]): CLIOptions {
 			help: false,
 			version: false,
 			"dry-run": false,
+			verbose: false,
 		},
 	});
 
@@ -44,6 +46,7 @@ export function parseArguments(args: string[]): CLIOptions {
 		help: flags.help as boolean,
 		version: flags.version as boolean,
 		dryRun: flags["dry-run"] as boolean,
+		verbose: flags.verbose as boolean,
 	};
 }
 
@@ -84,9 +87,11 @@ OPTIONS:
   
   --dry-run             Show what would be done without making changes
   
+  --verbose             Show detailed output with progress indicators
+  
   -h, --help            Show this help message
   
-  -v, --version         Show version information
+  --version             Show version information
 
 EXAMPLES:
   # Create PRs for current stack (auto-bookmarks unbookmarked changes)
