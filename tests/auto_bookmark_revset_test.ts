@@ -1,6 +1,6 @@
 import { assertEquals } from "@std/assert";
 import { describe, it } from "@std/testing/bdd";
-import { AutoBookmarkManager } from "../src/auto_bookmark.ts";
+import { findUnbookmarkedChanges } from "../src/auto_bookmark.ts";
 import type { CommandExecutor } from "../src/stack_detection.ts";
 
 // Helper function to create mock responses
@@ -73,10 +73,10 @@ szqzyprqmrlwvkrpmvppxsutusrvpprl `;
 
 			const mockExecutor = createRevsetMockExecutor(logOutput, showMap);
 
-			const manager = new AutoBookmarkManager(mockExecutor);
+			// Using functional API
 
 			// Act
-			const unbookmarked = await manager.findUnbookmarkedChanges();
+			const unbookmarked = await findUnbookmarkedChanges(mockExecutor);
 
 			// Assert - should only get stack changes, not initial commit
 			assertEquals(unbookmarked.length, 2);
@@ -101,10 +101,10 @@ change6 `;
 
 			const mockExecutor = createRevsetMockExecutor(logOutput, showMap);
 
-			const manager = new AutoBookmarkManager(mockExecutor);
+			// Using functional API
 
 			// Act
-			const unbookmarked = await manager.findUnbookmarkedChanges();
+			const unbookmarked = await findUnbookmarkedChanges(mockExecutor);
 
 			// Assert
 			assertEquals(unbookmarked.length, 5);
@@ -119,10 +119,10 @@ grandparent `;
 
 			const mockExecutor = createRevsetMockExecutor(logOutput, showMap);
 
-			const manager = new AutoBookmarkManager(mockExecutor);
+			// Using functional API
 
 			// Act
-			const unbookmarked = await manager.findUnbookmarkedChanges();
+			const unbookmarked = await findUnbookmarkedChanges(mockExecutor);
 
 			// Assert - should get exactly the stack changes
 			assertEquals(unbookmarked.length, 3);

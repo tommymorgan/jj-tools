@@ -1,10 +1,14 @@
 import { assertEquals, assertExists } from "@std/assert";
 import { describe, it } from "@std/testing/bdd";
 import {
+	buildPRChain,
 	type CreatePROptions,
+	createPR,
 	type ExistingPR,
-	PullRequestManager,
+	extractPRNumber,
+	findExistingPRs,
 	type UpdatePROptions,
+	updatePR,
 } from "../src/pr_manager.ts";
 import type { Bookmark } from "../src/stack_detection.ts";
 
@@ -38,7 +42,7 @@ describe("Pull Request Manager", () => {
 				},
 			};
 
-			const manager = new PullRequestManager(mockExecutor);
+			// Using functional API
 			const bookmarks: Bookmark[] = [
 				{ name: "feature-1" },
 				{ name: "feature-2" },
@@ -46,7 +50,7 @@ describe("Pull Request Manager", () => {
 			];
 
 			// Act
-			const existingPRs = await manager.findExistingPRs(bookmarks);
+			const existingPRs = await findExistingPRs(mockExecutor, bookmarks);
 
 			// Assert
 			assertEquals(existingPRs.size, 2);
@@ -68,11 +72,11 @@ describe("Pull Request Manager", () => {
 				},
 			};
 
-			const manager = new PullRequestManager(mockExecutor);
+			// Using functional API
 			const bookmarks: Bookmark[] = [{ name: "feature-1" }];
 
 			// Act
-			const existingPRs = await manager.findExistingPRs(bookmarks);
+			const existingPRs = await findExistingPRs(mockExecutor, bookmarks);
 
 			// Assert
 			assertEquals(existingPRs.size, 0);
@@ -97,7 +101,7 @@ describe("Pull Request Manager", () => {
 				},
 			};
 
-			const manager = new PullRequestManager(mockExecutor);
+			// Using functional API
 			const options: CreatePROptions = {
 				title: "feat: add new feature",
 				body: "Test PR body",
@@ -107,7 +111,7 @@ describe("Pull Request Manager", () => {
 			};
 
 			// Act
-			const prNumber = await manager.createPR(options);
+			const prNumber = await createPR(mockExecutor, options);
 
 			// Assert
 			assertEquals(prNumber, 123);
@@ -136,7 +140,7 @@ describe("Pull Request Manager", () => {
 				},
 			};
 
-			const manager = new PullRequestManager(mockExecutor);
+			// Using functional API
 			const options: CreatePROptions = {
 				title: "test: add tests",
 				body: "Draft PR",
@@ -146,7 +150,7 @@ describe("Pull Request Manager", () => {
 			};
 
 			// Act
-			const prNumber = await manager.createPR(options);
+			const prNumber = await createPR(mockExecutor, options);
 
 			// Assert
 			assertEquals(prNumber, 124);
@@ -165,7 +169,7 @@ describe("Pull Request Manager", () => {
 				},
 			};
 
-			const manager = new PullRequestManager(mockExecutor);
+			// Using functional API
 			const options: UpdatePROptions = {
 				prNumber: 101,
 				base: "develop",
@@ -173,7 +177,7 @@ describe("Pull Request Manager", () => {
 			};
 
 			// Act
-			await manager.updatePR(options);
+			await updatePR(mockExecutor, options);
 
 			// Assert
 			const baseCommand = capturedCommands.find(
@@ -194,14 +198,14 @@ describe("Pull Request Manager", () => {
 				},
 			};
 
-			const manager = new PullRequestManager(mockExecutor);
+			// Using functional API
 			const options: UpdatePROptions = {
 				prNumber: 102,
 				body: "New PR description with chain visualization",
 			};
 
 			// Act
-			await manager.updatePR(options);
+			await updatePR(mockExecutor, options);
 
 			// Assert
 			const bodyCommand = capturedCommands.find(
@@ -215,11 +219,11 @@ describe("Pull Request Manager", () => {
 	describe("buildPRChain", () => {
 		it("should build correct PR chain for stack", async () => {
 			// Arrange
-			const mockExecutor = {
+			const _mockExecutor = {
 				exec: async () => ({ stdout: "", stderr: "", code: 0 }),
 			};
 
-			const manager = new PullRequestManager(mockExecutor);
+			// Using functional API
 			const bookmarks: Bookmark[] = [
 				{ name: "feature-1", commitMessage: "feat: add auth" },
 				{ name: "feature-2", commitMessage: "feat: add profile" },
@@ -239,11 +243,7 @@ describe("Pull Request Manager", () => {
 			]);
 
 			// Act
-			const chain = await manager.buildPRChain(
-				bookmarks,
-				existingPRs,
-				"master",
-			);
+			const chain = await buildPRChain(bookmarks, existingPRs, "master");
 
 			// Assert
 			assertEquals(chain.length, 3);
@@ -272,15 +272,15 @@ describe("Pull Request Manager", () => {
 
 		it("should handle custom base branch", async () => {
 			// Arrange
-			const mockExecutor = {
+			const _mockExecutor = {
 				exec: async () => ({ stdout: "", stderr: "", code: 0 }),
 			};
 
-			const manager = new PullRequestManager(mockExecutor);
+			// Using functional API
 			const bookmarks: Bookmark[] = [{ name: "fix-1" }, { name: "fix-2" }];
 
 			// Act
-			const chain = await manager.buildPRChain(bookmarks, new Map(), "develop");
+			const chain = await buildPRChain(bookmarks, new Map(), "develop");
 
 			// Assert
 			assertEquals(chain[0].base, "develop");
@@ -290,32 +290,19 @@ describe("Pull Request Manager", () => {
 
 	describe("extractPRNumber", () => {
 		it("should extract PR number from GitHub URL", () => {
-			// Arrange
-			const manager = new PullRequestManager({
-				exec: async () => ({ stdout: "", stderr: "", code: 0 }),
-			});
-
 			// Act & Assert
 			assertEquals(
-				manager.extractPRNumber("https://github.com/owner/repo/pull/456"),
+				extractPRNumber("https://github.com/owner/repo/pull/456"),
 				456,
 			);
-			assertEquals(
-				manager.extractPRNumber("https://github.com/owner/repo/pull/1"),
-				1,
-			);
-			assertEquals(manager.extractPRNumber("Created PR #789"), 789);
+			assertEquals(extractPRNumber("https://github.com/owner/repo/pull/1"), 1);
+			assertEquals(extractPRNumber("Created PR #789"), 789);
 		});
 
 		it("should return null for invalid PR references", () => {
-			// Arrange
-			const manager = new PullRequestManager({
-				exec: async () => ({ stdout: "", stderr: "", code: 0 }),
-			});
-
 			// Act & Assert
-			assertEquals(manager.extractPRNumber("No PR here"), null);
-			assertEquals(manager.extractPRNumber(""), null);
+			assertEquals(extractPRNumber("No PR here"), null);
+			assertEquals(extractPRNumber(""), null);
 		});
 	});
 });

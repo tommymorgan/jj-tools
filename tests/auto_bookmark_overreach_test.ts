@@ -1,6 +1,6 @@
 import { assertEquals } from "@std/assert";
 import { describe, it } from "@std/testing/bdd";
-import { AutoBookmarkManager } from "../src/auto_bookmark.ts";
+import { findUnbookmarkedChanges } from "../src/auto_bookmark.ts";
 import {
 	createMockExecutor,
 	generateProblematicHistory,
@@ -24,8 +24,8 @@ describe("Auto-bookmark scope limitation", () => {
 				trunk: "master",
 			});
 
-			const manager = new AutoBookmarkManager(mockExecutor);
-			const unbookmarked = await manager.findUnbookmarkedChanges();
+			// Using functional API
+			const unbookmarked = await findUnbookmarkedChanges(mockExecutor);
 
 			// Fixed: Should only detect the working copy, not the 384 merged commits
 			// The working copy has no bookmarks and an empty description
@@ -61,8 +61,8 @@ describe("Auto-bookmark scope limitation", () => {
 				immutableCommits: immutableIds,
 			});
 
-			const manager = new AutoBookmarkManager(mockExecutor);
-			const unbookmarked = await manager.findUnbookmarkedChanges();
+			// Using functional API
+			const unbookmarked = await findUnbookmarkedChanges(mockExecutor);
 
 			// Should only find the 2 mutable commits, not the 5 immutable ones
 			assertEquals(

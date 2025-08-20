@@ -1,7 +1,13 @@
 #!/usr/bin/env -S deno run --allow-run --allow-read --allow-write --allow-env
 
 import { validateGitHubAuthOrExit } from "./auth_validator.ts";
-import { AutoBookmarkManager } from "./auto_bookmark.ts";
+import {
+	cleanupMergedAutoBookmarks,
+	createAutoBookmark,
+	findAutoBookmarks,
+	findUnbookmarkedChanges,
+	generateBookmarkName,
+} from "./auto_bookmark.ts";
 import { detectBaseBranch } from "./base_detector.ts";
 import {
 	type CLIOptions,
@@ -10,11 +16,18 @@ import {
 	validateOptions,
 } from "./cli.ts";
 import { checkStackLinearity } from "./linearity_checker.ts";
-import { type PRChainInfo, PRDescriptionGenerator } from "./pr_description.ts";
 import {
+	extractOriginalBody,
+	generateDescription,
+	type PRChainInfo,
+} from "./pr_description.ts";
+import {
+	buildPRChain,
+	createPR,
 	type ExistingPR,
+	findExistingPRs,
 	type PRInfo,
-	PullRequestManager,
+	updatePR,
 } from "./pr_manager.ts";
 import {
 	detectPRStack,
@@ -37,24 +50,26 @@ import {
 import { showVersion } from "./version.ts";
 
 // Real command executor that runs system commands
-class SystemCommandExecutor implements CommandExecutor {
-	async exec(
-		cmd: string[],
-	): Promise<{ stdout: string; stderr: string; code: number }> {
-		const command = new Deno.Command(cmd[0], {
-			args: cmd.slice(1),
-			stdout: "piped",
-			stderr: "piped",
-		});
+export function createSystemCommandExecutor(): CommandExecutor {
+	return {
+		async exec(
+			cmd: string[],
+		): Promise<{ stdout: string; stderr: string; code: number }> {
+			const command = new Deno.Command(cmd[0], {
+				args: cmd.slice(1),
+				stdout: "piped",
+				stderr: "piped",
+			});
 
-		const { code, stdout, stderr } = await command.output();
+			const { code, stdout, stderr } = await command.output();
 
-		return {
-			stdout: new TextDecoder().decode(stdout),
-			stderr: new TextDecoder().decode(stderr),
-			code,
-		};
-	}
+			return {
+				stdout: new TextDecoder().decode(stdout),
+				stderr: new TextDecoder().decode(stderr),
+				code,
+			};
+		},
+	};
 }
 
 // Helper functions to reduce complexity
@@ -82,17 +97,16 @@ function handleValidationErrors(errors: string[]): void {
 async function cleanupAutoBookmarks(
 	options: CLIOptions,
 	executor: CommandExecutor,
-	autoBookmarkManager: AutoBookmarkManager,
 ): Promise<void> {
 	if (options.keepAuto) return;
 
 	safeLog("🧹 Cleaning up auto-bookmarks...");
-	const autoBookmarks = await autoBookmarkManager.findAutoBookmarks();
+	const autoBookmarks = await findAutoBookmarks(executor);
 
 	if (options.cleanupAllAuto) {
 		await forceCleanupAllAutoBookmarks(autoBookmarks, options, executor);
 	} else if (autoBookmarks.length > 0) {
-		await cleanupMergedAutoBookmarks(autoBookmarks, autoBookmarkManager);
+		await cleanupMergedAutoBookmarksWrapper(autoBookmarks, executor);
 	}
 }
 
@@ -109,12 +123,14 @@ async function forceCleanupAllAutoBookmarks(
 	}
 }
 
-async function cleanupMergedAutoBookmarks(
+async function cleanupMergedAutoBookmarksWrapper(
 	autoBookmarks: string[],
-	autoBookmarkManager: AutoBookmarkManager,
+	executor: CommandExecutor,
 ): Promise<void> {
-	const cleanupResult =
-		await autoBookmarkManager.cleanupMergedAutoBookmarks(autoBookmarks);
+	const cleanupResult = await cleanupMergedAutoBookmarks(
+		executor,
+		autoBookmarks,
+	);
 	for (const deleted of cleanupResult.deleted) {
 		safeLog(`  - ${deleted}: PR merged/closed ✓ deleted`);
 	}
@@ -122,34 +138,34 @@ async function cleanupMergedAutoBookmarks(
 
 async function handleUnbookmarkedChanges(
 	options: CLIOptions,
-	autoBookmarkManager: AutoBookmarkManager,
+	executor: CommandExecutor,
 ): Promise<void> {
 	if (options.noAutoBookmark) return;
 
 	safeLog("🔍 Checking for unbookmarked changes...");
-	const unbookmarked = await autoBookmarkManager.findUnbookmarkedChanges();
+	const unbookmarked = await findUnbookmarkedChanges(executor);
 
 	if (unbookmarked.length === 0) return;
 
 	safeLog(`⚠️  Found ${unbookmarked.length} unbookmarked change(s)`);
 
 	for (const change of unbookmarked) {
-		await processUnbookmarkedChange(change, options, autoBookmarkManager);
+		await processUnbookmarkedChange(change, options, executor);
 	}
 }
 
 async function processUnbookmarkedChange(
 	change: { changeId: string; description: string },
 	options: CLIOptions,
-	autoBookmarkManager: AutoBookmarkManager,
+	executor: CommandExecutor,
 ): Promise<void> {
 	safeLog(`  - ${change.changeId}: ${change.description}`);
 
 	if (!options.dryRun) {
-		const autoBookmark = await autoBookmarkManager.createAutoBookmark(change);
+		const autoBookmark = await createAutoBookmark(executor, change);
 		safeLog(`  🔖 Created auto-bookmark: ${autoBookmark.name}`);
 	} else {
-		const bookmarkName = autoBookmarkManager.generateBookmarkName(
+		const bookmarkName = generateBookmarkName(
 			change.description,
 			change.changeId,
 		);
@@ -216,7 +232,7 @@ async function processPullRequest(
 	index: number,
 	prChain: PRInfo[],
 	options: CLIOptions,
-	prManager: PullRequestManager,
+	executor: CommandExecutor,
 	_existingPRs: Map<string, ExistingPR>,
 ): Promise<PRChainInfo | null> {
 	const prCount = index + 1;
@@ -229,7 +245,7 @@ async function processPullRequest(
 			prCount,
 			prChain.length,
 			options,
-			prManager,
+			executor,
 			isDraft,
 		);
 	}
@@ -238,7 +254,7 @@ async function processPullRequest(
 		prCount,
 		prChain.length,
 		options,
-		prManager,
+		executor,
 		isDraft,
 	);
 }
@@ -248,7 +264,7 @@ async function updateExistingPR(
 	prCount: number,
 	totalPRs: number,
 	options: CLIOptions,
-	prManager: PullRequestManager,
+	executor: CommandExecutor,
 	_isDraft: boolean,
 ): Promise<PRChainInfo | null> {
 	const existingPR = pr.existingPR;
@@ -264,7 +280,7 @@ async function updateExistingPR(
 
 	if (!options.dryRun) {
 		if (existingPR.baseRefName !== pr.base) {
-			await prManager.updatePR({
+			await updatePR(executor, {
 				prNumber: existingPR.number,
 				base: pr.base,
 			});
@@ -291,7 +307,7 @@ async function createNewPR(
 	prCount: number,
 	totalPRs: number,
 	options: CLIOptions,
-	prManager: PullRequestManager,
+	executor: CommandExecutor,
 	isDraft: boolean,
 ): Promise<PRChainInfo | null> {
 	safeLog(
@@ -299,7 +315,7 @@ async function createNewPR(
 	);
 
 	if (!options.dryRun) {
-		const prNumber = await prManager.createPR({
+		const prNumber = await createPR(executor, {
 			title: pr.title,
 			body: `Initial PR for ${pr.bookmark}`,
 			head: pr.bookmark,
@@ -327,8 +343,6 @@ async function createNewPR(
 async function updatePRDescriptions(
 	createdPRs: PRChainInfo[],
 	executor: CommandExecutor,
-	descriptionGenerator: PRDescriptionGenerator,
-	prManager: PullRequestManager,
 ): Promise<void> {
 	safeLog("📝 Updating PR descriptions...");
 
@@ -336,19 +350,15 @@ async function updatePRDescriptions(
 		const pr = createdPRs[i];
 		if (!pr.prNumber) continue;
 
-		const originalBody = await fetchPRBody(
-			pr.prNumber,
-			executor,
-			descriptionGenerator,
-		);
-		const description = descriptionGenerator.generateDescription({
+		const originalBody = await fetchPRBody(pr.prNumber, executor);
+		const description = generateDescription({
 			currentPR: pr,
 			fullChain: createdPRs,
 			position: i + 1,
 			originalBody,
 		});
 
-		await prManager.updatePR({
+		await updatePR(executor, {
 			prNumber: pr.prNumber,
 			body: description,
 		});
@@ -358,7 +368,6 @@ async function updatePRDescriptions(
 async function fetchPRBody(
 	prNumber: number,
 	executor: CommandExecutor,
-	descriptionGenerator: PRDescriptionGenerator,
 ): Promise<string> {
 	const viewResult = await executor.exec([
 		"gh",
@@ -373,7 +382,7 @@ async function fetchPRBody(
 
 	try {
 		const prData = JSON.parse(viewResult.stdout);
-		return descriptionGenerator.extractOriginalBody(prData.body || "");
+		return extractOriginalBody(prData.body || "");
 	} catch {
 		return "";
 	}
@@ -408,22 +417,15 @@ function showSummary(
 
 interface AppContext {
 	executor: CommandExecutor;
-	prManager: PullRequestManager;
-	autoBookmarkManager: AutoBookmarkManager;
-	descriptionGenerator: PRDescriptionGenerator;
 	options: CLIOptions & { baseBranch: string }; // baseBranch is guaranteed to be set
 }
 
 async function processStack(ctx: AppContext): Promise<void> {
 	// Step 1: Clean up auto bookmarks
-	await cleanupAutoBookmarks(
-		ctx.options,
-		ctx.executor,
-		ctx.autoBookmarkManager,
-	);
+	await cleanupAutoBookmarks(ctx.options, ctx.executor);
 
 	// Step 2: Handle unbookmarked changes
-	await handleUnbookmarkedChanges(ctx.options, ctx.autoBookmarkManager);
+	await handleUnbookmarkedChanges(ctx.options, ctx.executor);
 
 	// Step 3: Detect and validate stack
 	const stack = await detectAndValidateStack(ctx);
@@ -674,8 +676,8 @@ async function checkForConflicts(ctx: AppContext): Promise<void> {
 
 async function processPRs(ctx: AppContext, stack: StackInfo): Promise<void> {
 	safeLog("🔗 Building PR chain...");
-	const existingPRs = await ctx.prManager.findExistingPRs(stack.bookmarks);
-	const prChain = await ctx.prManager.buildPRChain(
+	const existingPRs = await findExistingPRs(ctx.executor, stack.bookmarks);
+	const prChain = buildPRChain(
 		stack.bookmarks,
 		existingPRs,
 		ctx.options.baseBranch,
@@ -697,7 +699,7 @@ async function createOrUpdatePRs(
 			i,
 			prChain,
 			ctx.options,
-			ctx.prManager,
+			ctx.executor,
 			existingPRs,
 		);
 		if (prInfo) {
@@ -713,12 +715,7 @@ async function finalizePRs(
 	existingPRs: Map<string, ExistingPR>,
 ): Promise<void> {
 	if (!ctx.options.dryRun && createdPRs.length > 0) {
-		await updatePRDescriptions(
-			createdPRs,
-			ctx.executor,
-			ctx.descriptionGenerator,
-			ctx.prManager,
-		);
+		await updatePRDescriptions(createdPRs, ctx.executor);
 	}
 
 	if (!ctx.options.dryRun) {
@@ -745,7 +742,7 @@ async function main() {
 	handleHelpAndVersion(options);
 	handleValidationErrors(validateOptions(options));
 
-	const executor = new SystemCommandExecutor();
+	const executor = createSystemCommandExecutor();
 
 	// Validate GitHub authentication early (BUG-006)
 	await validateGitHubAuthOrExit(executor, options.dryRun);
@@ -766,9 +763,6 @@ async function main() {
 
 	const ctx: AppContext = {
 		executor,
-		prManager: new PullRequestManager(executor),
-		autoBookmarkManager: new AutoBookmarkManager(executor),
-		descriptionGenerator: new PRDescriptionGenerator(),
 		options: options as CLIOptions & { baseBranch: string },
 	};
 

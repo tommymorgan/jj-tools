@@ -1,8 +1,11 @@
 import { assertEquals, assertStringIncludes } from "@std/assert";
 import { describe, it } from "@std/testing/bdd";
 import {
+	extractOriginalBody,
+	formatChainItem,
+	formatPRStatus,
+	generateDescription,
 	type PRChainInfo,
-	PRDescriptionGenerator,
 	type PRDescriptionOptions,
 } from "../src/pr_description.ts";
 
@@ -10,7 +13,7 @@ describe("PR Description Generator", () => {
 	describe("generateDescription", () => {
 		it("should generate description with stack position for bottom PR", () => {
 			// Arrange
-			const generator = new PRDescriptionGenerator();
+			// Using functional API
 			const chain: PRChainInfo[] = [
 				{
 					bookmark: "feature-1",
@@ -46,7 +49,7 @@ describe("PR Description Generator", () => {
 			};
 
 			// Act
-			const description = generator.generateDescription(options);
+			const description = generateDescription(options);
 
 			// Assert
 			assertStringIncludes(description, "Stack position: 1 of 3");
@@ -58,7 +61,7 @@ describe("PR Description Generator", () => {
 
 		it("should generate description with dependencies for middle PR", () => {
 			// Arrange
-			const generator = new PRDescriptionGenerator();
+			// Using functional API
 			const chain: PRChainInfo[] = [
 				{
 					bookmark: "feature-1",
@@ -94,7 +97,7 @@ describe("PR Description Generator", () => {
 			};
 
 			// Act
-			const description = generator.generateDescription(options);
+			const description = generateDescription(options);
 
 			// Assert
 			assertStringIncludes(description, "Stack position: 2 of 3");
@@ -105,7 +108,7 @@ describe("PR Description Generator", () => {
 
 		it("should include full chain visualization", () => {
 			// Arrange
-			const generator = new PRDescriptionGenerator();
+			// Using functional API
 			const chain: PRChainInfo[] = [
 				{
 					bookmark: "feature-1",
@@ -138,7 +141,7 @@ describe("PR Description Generator", () => {
 			};
 
 			// Act
-			const description = generator.generateDescription(options);
+			const description = generateDescription(options);
 
 			// Assert
 			assertStringIncludes(description, "PR Stack (review in order) as of");
@@ -159,7 +162,7 @@ describe("PR Description Generator", () => {
 
 		it("should highlight current PR in chain visualization", () => {
 			// Arrange
-			const generator = new PRDescriptionGenerator();
+			// Using functional API
 			const chain: PRChainInfo[] = [
 				{
 					bookmark: "fix-1",
@@ -185,7 +188,7 @@ describe("PR Description Generator", () => {
 			};
 
 			// Act
-			const description = generator.generateDescription(options);
+			const description = generateDescription(options);
 
 			// Assert
 			// Current PR should be bold with "You are here" marker
@@ -199,7 +202,7 @@ describe("PR Description Generator", () => {
 
 		it("should format date correctly in chain header", () => {
 			// Arrange
-			const generator = new PRDescriptionGenerator();
+			// Using functional API
 			const chain: PRChainInfo[] = [
 				{
 					bookmark: "feature-1",
@@ -218,7 +221,7 @@ describe("PR Description Generator", () => {
 			};
 
 			// Act
-			const description = generator.generateDescription(options);
+			const description = generateDescription(options);
 			const today = new Date().toISOString().split("T")[0];
 
 			// Assert
@@ -232,7 +235,7 @@ describe("PR Description Generator", () => {
 	describe("extractOriginalBody", () => {
 		it("should extract body without chain metadata", () => {
 			// Arrange
-			const generator = new PRDescriptionGenerator();
+			// Using functional API
 			const fullDescription = `Stack position: 2 of 3
 Base: \`feature-1\`
 Depends on: #101
@@ -249,7 +252,7 @@ Full chain of PRs as of 2024-01-01:
 Created with jj (Jujutsu) stack-prs`;
 
 			// Act
-			const originalBody = generator.extractOriginalBody(fullDescription);
+			const originalBody = extractOriginalBody(fullDescription);
 
 			// Assert
 			assertEquals(
@@ -260,12 +263,12 @@ Created with jj (Jujutsu) stack-prs`;
 
 		it("should return full body if no metadata found", () => {
 			// Arrange
-			const generator = new PRDescriptionGenerator();
+			// Using functional API
 			const simpleDescription =
 				"This is a simple PR description without metadata.";
 
 			// Act
-			const originalBody = generator.extractOriginalBody(simpleDescription);
+			const originalBody = extractOriginalBody(simpleDescription);
 
 			// Assert
 			assertEquals(originalBody, simpleDescription);
@@ -273,10 +276,10 @@ Created with jj (Jujutsu) stack-prs`;
 
 		it("should handle empty descriptions", () => {
 			// Arrange
-			const generator = new PRDescriptionGenerator();
+			// Using functional API
 
 			// Act
-			const originalBody = generator.extractOriginalBody("");
+			const originalBody = extractOriginalBody("");
 
 			// Assert
 			assertEquals(originalBody, "");
@@ -286,27 +289,27 @@ Created with jj (Jujutsu) stack-prs`;
 	describe("formatPRStatus", () => {
 		it("should format ready PR status correctly", () => {
 			// Arrange
-			const generator = new PRDescriptionGenerator();
+			// Using functional API
 
 			// Act & Assert
-			assertEquals(generator.formatPRStatus(false, true), "ready for review");
-			assertEquals(generator.formatPRStatus(false, false), "ready for review");
+			assertEquals(formatPRStatus(false, true), "ready for review");
+			assertEquals(formatPRStatus(false, false), "ready for review");
 		});
 
 		it("should format draft PR status correctly", () => {
 			// Arrange
-			const generator = new PRDescriptionGenerator();
+			// Using functional API
 
 			// Act & Assert
-			assertEquals(generator.formatPRStatus(true, false), "draft");
-			assertEquals(generator.formatPRStatus(true, true), "draft");
+			assertEquals(formatPRStatus(true, false), "draft");
+			assertEquals(formatPRStatus(true, true), "draft");
 		});
 	});
 
 	describe("generateDescription with commit message", () => {
 		it("should replace PR body with commit message between stack metadata and chain visualization", () => {
 			// Arrange
-			const generator = new PRDescriptionGenerator();
+			// Using functional API
 			const chain: PRChainInfo[] = [
 				{
 					bookmark: "feature-1",
@@ -335,7 +338,7 @@ Created with jj (Jujutsu) stack-prs`;
 			};
 
 			// Act
-			const description = generator.generateDescription(options);
+			const description = generateDescription(options);
 
 			// Assert
 			// Should include stack metadata
@@ -365,7 +368,7 @@ Created with jj (Jujutsu) stack-prs`;
 
 		it("should include commit message in complete PR description even without body text", () => {
 			// Arrange
-			const generator = new PRDescriptionGenerator();
+			// Using functional API
 			const chain: PRChainInfo[] = [
 				{
 					bookmark: "quick-fix",
@@ -385,7 +388,7 @@ Created with jj (Jujutsu) stack-prs`;
 			};
 
 			// Act
-			const description = generator.generateDescription(options);
+			const description = generateDescription(options);
 
 			// Assert
 			// Should include stack metadata
@@ -404,7 +407,7 @@ Created with jj (Jujutsu) stack-prs`;
 	describe("formatChainItem", () => {
 		it("should format chain item with PR number", () => {
 			// Arrange
-			const generator = new PRDescriptionGenerator();
+			// Using functional API
 			const item: PRChainInfo = {
 				bookmark: "feature-1",
 				base: "master",
@@ -414,7 +417,7 @@ Created with jj (Jujutsu) stack-prs`;
 			};
 
 			// Act
-			const formatted = generator.formatChainItem(item, false, 1);
+			const formatted = formatChainItem(item, false, 1);
 
 			// Assert
 			assertEquals(
@@ -425,7 +428,7 @@ Created with jj (Jujutsu) stack-prs`;
 
 		it("should bold current PR in chain", () => {
 			// Arrange
-			const generator = new PRDescriptionGenerator();
+			// Using functional API
 			const item: PRChainInfo = {
 				bookmark: "feature-2",
 				base: "feature-1",
@@ -435,7 +438,7 @@ Created with jj (Jujutsu) stack-prs`;
 			};
 
 			// Act
-			const formatted = generator.formatChainItem(item, true, 2);
+			const formatted = formatChainItem(item, true, 2);
 
 			// Assert
 			assertEquals(
@@ -446,7 +449,7 @@ Created with jj (Jujutsu) stack-prs`;
 
 		it("should handle PR without number", () => {
 			// Arrange
-			const generator = new PRDescriptionGenerator();
+			// Using functional API
 			const item: PRChainInfo = {
 				bookmark: "feature-3",
 				base: "feature-2",
@@ -455,7 +458,7 @@ Created with jj (Jujutsu) stack-prs`;
 			};
 
 			// Act
-			const formatted = generator.formatChainItem(item, false, 3);
+			const formatted = formatChainItem(item, false, 3);
 
 			// Assert
 			assertEquals(formatted, "3. feature-3 → feature-2 (draft)");
