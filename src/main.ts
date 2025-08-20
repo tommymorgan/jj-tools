@@ -16,7 +16,11 @@ import {
 	type PRInfo,
 	PullRequestManager,
 } from "./pr_manager.ts";
-import { detectPRStack, reconcilePRBookmarks } from "./pr_stack_detector.ts";
+import {
+	detectPRStack,
+	type PRStackInfo,
+	reconcilePRBookmarks,
+} from "./pr_stack_detector.ts";
 import {
 	installBrokenPipeHandlers,
 	safeError,
@@ -434,6 +438,18 @@ async function processStack(ctx: AppContext): Promise<void> {
 	await processPRs(ctx, stack);
 }
 
+function handleReconcileFailure(error: string | undefined): never {
+	const errorMessage = error || "Unknown error";
+	safeError(`❌ Failed to reconcile remote bookmarks: ${errorMessage}`);
+	Deno.exit(1);
+}
+
+function handleDryRunSuccess(): never {
+	safeLog("\n✅ Would have successfully created PR stack after reconciliation");
+	safeLog("(This was a dry run - no changes were made)");
+	Deno.exit(0);
+}
+
 async function handleRemoteBookmarksIfNeeded(ctx: AppContext): Promise<void> {
 	const stackWithRemotes = await detectStackWithRemotes(
 		ctx.executor,
@@ -451,26 +467,18 @@ async function handleRemoteBookmarksIfNeeded(ctx: AppContext): Promise<void> {
 	);
 
 	if (!reconcileResult.success) {
-		safeError(
-			`❌ Failed to reconcile remote bookmarks: ${reconcileResult.error || "Unknown error"}`,
-		);
-		Deno.exit(1);
+		handleReconcileFailure(reconcileResult.error);
 	}
 
-	if (reconcileResult.reconciledBookmarks.length > 0) {
-		safeLog(
-			`✅ Created ${reconcileResult.reconciledBookmarks.length} local bookmark(s) tracking remotes`,
-		);
+	const count = reconcileResult.reconciledBookmarks.length;
+	if (count === 0) {
+		return;
+	}
 
-		// In dry-run mode with reconciled bookmarks, we can't continue
-		// because the bookmarks weren't actually created
-		if (ctx.options.dryRun) {
-			safeLog(
-				"\n✅ Would have successfully created PR stack after reconciliation",
-			);
-			safeLog("(This was a dry run - no changes were made)");
-			Deno.exit(0);
-		}
+	safeLog(`✅ Created ${count} local bookmark(s) tracking remotes`);
+
+	if (ctx.options.dryRun) {
+		handleDryRunSuccess();
 	}
 }
 
@@ -489,6 +497,114 @@ async function detectAndValidateStack(ctx: AppContext): Promise<StackInfo> {
 	return stack;
 }
 
+function logPRStack(prStackInfo: PRStackInfo): void {
+	safeLog("\n⚠️  Detected PR stack with missing local bookmarks!");
+	safeLog(
+		"  This typically happens when you switch computers after pushing a stack.",
+	);
+
+	if (prStackInfo.prs.length === 0) {
+		return;
+	}
+
+	safeLog("\n  PR Stack found:");
+	prStackInfo.prs.forEach((pr, i) => {
+		const hasLocal = prStackInfo.existingLocalBookmarks.includes(
+			pr.headRefName,
+		);
+		const status = hasLocal ? "✅" : "❌ missing";
+		safeLog(
+			`    ${i + 1}. #${pr.number}: ${pr.headRefName} → ${pr.baseRefName} ${status}`,
+		);
+	});
+}
+
+function logMissingBookmarks(bookmarks: string[]): void {
+	safeLog(`\n  Missing ${bookmarks.length} local bookmark(s):`);
+	for (const bookmark of bookmarks) {
+		safeLog(`    - ${bookmark}`);
+	}
+}
+
+async function handlePRDetection(
+	prStackInfo: PRStackInfo,
+	executor: CommandExecutor,
+	dryRun: boolean,
+): Promise<{
+	success: boolean;
+	reconciledBookmarks: string[];
+	error?: string;
+}> {
+	if (prStackInfo.missingLocalBookmarks.length === 0) {
+		return { success: true, reconciledBookmarks: [] };
+	}
+
+	logPRStack(prStackInfo);
+	logMissingBookmarks(prStackInfo.missingLocalBookmarks);
+
+	if (dryRun) {
+		safeLog(
+			"\n  🔍 DRY RUN: Would create local bookmarks tracking these remotes",
+		);
+		return {
+			success: true,
+			reconciledBookmarks: prStackInfo.missingLocalBookmarks,
+		};
+	}
+
+	safeLog("\n  Creating local bookmarks to track remotes...");
+	const result = await reconcilePRBookmarks(
+		executor,
+		prStackInfo.missingLocalBookmarks,
+		dryRun,
+	);
+
+	return {
+		success: result.success,
+		reconciledBookmarks: result.success ? result.createdBookmarks : [],
+		error: result.success ? undefined : result.error,
+	};
+}
+
+async function handleFallbackDetection(
+	executor: CommandExecutor,
+	baseBranch: string,
+	dryRun: boolean,
+): Promise<{
+	success: boolean;
+	reconciledBookmarks: string[];
+	error?: string;
+}> {
+	const stackInfo = await detectStackWithRemotes(executor, baseBranch);
+
+	if (!stackInfo.hasRemoteOnlyBookmarks) {
+		return { success: true, reconciledBookmarks: [] };
+	}
+
+	safeLog("\n⚠️  Detected remote-only bookmarks in the stack!");
+	safeLog("  Remote bookmarks found:");
+	for (const remote of stackInfo.remoteBookmarks) {
+		safeLog(`    - ${remote.name}@${remote.remote}`);
+	}
+
+	if (dryRun) {
+		safeLog(
+			"\n  🔍 DRY RUN: Would create local bookmarks tracking these remotes",
+		);
+		return {
+			success: true,
+			reconciledBookmarks: stackInfo.remoteBookmarks.map((r) => r.name),
+		};
+	}
+
+	const result = await reconcileRemoteBookmarks(executor, baseBranch, dryRun);
+	return {
+		success: result.success,
+		reconciledBookmarks: result.createdBookmarks,
+		error: result.error,
+	};
+}
+
 // Handle remote-only bookmarks by creating local tracking bookmarks
 export async function handleRemoteOnlyBookmarks(
 	executor: CommandExecutor,
@@ -499,103 +615,11 @@ export async function handleRemoteOnlyBookmarks(
 	reconciledBookmarks: string[];
 	error?: string;
 }> {
-	// Use PR-aware stack detection
 	try {
 		const prStackInfo = await detectPRStack(executor, baseBranch);
-
-		// If no missing bookmarks, nothing to do
-		if (prStackInfo.missingLocalBookmarks.length === 0) {
-			return { success: true, reconciledBookmarks: [] };
-		}
-
-		safeLog("\n⚠️  Detected PR stack with missing local bookmarks!");
-		safeLog(
-			"  This typically happens when you switch computers after pushing a stack.",
-		);
-
-		// Show the PR stack
-		if (prStackInfo.prs.length > 0) {
-			safeLog("\n  PR Stack found:");
-			for (let i = 0; i < prStackInfo.prs.length; i++) {
-				const pr = prStackInfo.prs[i];
-				const hasLocal = prStackInfo.existingLocalBookmarks.includes(
-					pr.headRefName,
-				);
-				safeLog(
-					`    ${i + 1}. #${pr.number}: ${pr.headRefName} → ${pr.baseRefName} ${hasLocal ? "✅" : "❌ missing"}`,
-				);
-			}
-		}
-
-		safeLog(
-			`\n  Missing ${prStackInfo.missingLocalBookmarks.length} local bookmark(s):`,
-		);
-		for (const bookmark of prStackInfo.missingLocalBookmarks) {
-			safeLog(`    - ${bookmark}`);
-		}
-
-		if (dryRun) {
-			safeLog(
-				"\n  🔍 DRY RUN: Would create local bookmarks tracking these remotes",
-			);
-			return {
-				success: true,
-				reconciledBookmarks: prStackInfo.missingLocalBookmarks,
-			};
-		}
-
-		safeLog("\n  Creating local bookmarks to track remotes...");
-
-		// Use the PR-aware reconciliation
-		const result = await reconcilePRBookmarks(
-			executor,
-			prStackInfo.missingLocalBookmarks,
-			dryRun,
-		);
-
-		if (result.success) {
-			return {
-				success: true,
-				reconciledBookmarks: result.createdBookmarks,
-			};
-		}
-
-		return {
-			success: false,
-			reconciledBookmarks: [],
-			error: result.error,
-		};
-	} catch (e) {
-		// Fall back to the original detection if PR detection fails
-		const stackInfo = await detectStackWithRemotes(executor, baseBranch);
-
-		if (!stackInfo.hasRemoteOnlyBookmarks) {
-			return { success: true, reconciledBookmarks: [] };
-		}
-
-		// Use original logic as fallback
-		safeLog("\n⚠️  Detected remote-only bookmarks in the stack!");
-		safeLog("  Remote bookmarks found:");
-		for (const remote of stackInfo.remoteBookmarks) {
-			safeLog(`    - ${remote.name}@${remote.remote}`);
-		}
-
-		if (dryRun) {
-			safeLog(
-				"\n  🔍 DRY RUN: Would create local bookmarks tracking these remotes",
-			);
-			return {
-				success: true,
-				reconciledBookmarks: stackInfo.remoteBookmarks.map((r) => r.name),
-			};
-		}
-
-		const result = await reconcileRemoteBookmarks(executor, baseBranch, dryRun);
-		return {
-			success: result.success,
-			reconciledBookmarks: result.createdBookmarks,
-			error: result.error,
-		};
+		return await handlePRDetection(prStackInfo, executor, dryRun);
+	} catch (_e) {
+		return await handleFallbackDetection(executor, baseBranch, dryRun);
 	}
 }
 

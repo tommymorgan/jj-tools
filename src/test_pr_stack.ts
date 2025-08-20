@@ -1,6 +1,10 @@
 #!/usr/bin/env -S deno run --allow-run --allow-read --allow-write --allow-env
 
-import { detectPRStack, reconcilePRBookmarks } from "./pr_stack_detector.ts";
+import {
+	detectPRStack,
+	type PRStackInfo,
+	reconcilePRBookmarks,
+} from "./pr_stack_detector.ts";
 import type { CommandExecutor } from "./stack_detection.ts";
 
 const realExecutor: CommandExecutor = {
@@ -20,57 +24,61 @@ const realExecutor: CommandExecutor = {
 	},
 };
 
+function displayPRStack(stackInfo: PRStackInfo) {
+	if (stackInfo.prs.length === 0) return;
+
+	console.log("PR Stack (bottom to top):");
+	for (let i = 0; i < stackInfo.prs.length; i++) {
+		const pr = stackInfo.prs[i];
+		const hasLocal = stackInfo.existingLocalBookmarks.includes(pr.headRefName);
+		console.log(
+			`  ${i + 1}. #${pr.number}: ${pr.headRefName} → ${pr.baseRefName}`,
+		);
+		console.log(`     ${pr.title}`);
+		console.log(
+			`     Local bookmark: ${hasLocal ? "✅ EXISTS" : "❌ MISSING"}`,
+		);
+	}
+}
+
+async function testReconciliation(stackInfo: PRStackInfo) {
+	if (stackInfo.missingLocalBookmarks.length === 0) {
+		console.log("\n✅ All PR bookmarks exist locally!");
+		return;
+	}
+
+	console.log(
+		`\n⚠️  Missing ${stackInfo.missingLocalBookmarks.length} local bookmark(s):`,
+	);
+	for (const bookmark of stackInfo.missingLocalBookmarks) {
+		console.log(`  - ${bookmark}`);
+	}
+
+	console.log("\n🔧 Testing reconciliation (dry-run):");
+	const result = await reconcilePRBookmarks(
+		realExecutor,
+		stackInfo.missingLocalBookmarks,
+		true, // dry-run
+	);
+
+	if (result.success) {
+		console.log(
+			`\n✅ Would create ${result.createdBookmarks.length} local bookmark(s)`,
+		);
+	} else {
+		console.log(`\n❌ Reconciliation would fail: ${result.error}`);
+	}
+}
+
 async function testPRStackDetection() {
 	console.log("🔍 Testing PR-aware Stack Detection\n");
 
 	try {
 		// Detect the PR stack
 		const stackInfo = await detectPRStack(realExecutor);
-
 		console.log(`📊 Found ${stackInfo.prs.length} PRs in the stack:\n`);
-
-		if (stackInfo.prs.length > 0) {
-			console.log("PR Stack (bottom to top):");
-			for (let i = 0; i < stackInfo.prs.length; i++) {
-				const pr = stackInfo.prs[i];
-				const hasLocal = stackInfo.existingLocalBookmarks.includes(
-					pr.headRefName,
-				);
-				console.log(
-					`  ${i + 1}. #${pr.number}: ${pr.headRefName} → ${pr.baseRefName}`,
-				);
-				console.log(`     ${pr.title}`);
-				console.log(
-					`     Local bookmark: ${hasLocal ? "✅ EXISTS" : "❌ MISSING"}`,
-				);
-			}
-		}
-
-		if (stackInfo.missingLocalBookmarks.length > 0) {
-			console.log(
-				`\n⚠️  Missing ${stackInfo.missingLocalBookmarks.length} local bookmark(s):`,
-			);
-			for (const bookmark of stackInfo.missingLocalBookmarks) {
-				console.log(`  - ${bookmark}`);
-			}
-
-			console.log("\n🔧 Testing reconciliation (dry-run):");
-			const result = await reconcilePRBookmarks(
-				realExecutor,
-				stackInfo.missingLocalBookmarks,
-				true, // dry-run
-			);
-
-			if (result.success) {
-				console.log(
-					`\n✅ Would create ${result.createdBookmarks.length} local bookmark(s)`,
-				);
-			} else {
-				console.log(`\n❌ Reconciliation would fail: ${result.error}`);
-			}
-		} else {
-			console.log("\n✅ All PR bookmarks exist locally!");
-		}
+		displayPRStack(stackInfo);
+		await testReconciliation(stackInfo);
 	} catch (error) {
 		console.error("❌ Error:", error);
 	}

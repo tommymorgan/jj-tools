@@ -13,11 +13,7 @@ export interface PRStackInfo {
 	existingLocalBookmarks: string[];
 }
 
-export async function detectPRStack(
-	executor: CommandExecutor,
-	baseBranch: string = "master",
-): Promise<PRStackInfo> {
-	// Step 1: Get all PRs for the current user
+async function fetchUserPRs(executor: CommandExecutor): Promise<StackPR[]> {
 	const prsResult = await executor.exec([
 		"gh",
 		"pr",
@@ -34,12 +30,12 @@ export async function detectPRStack(
 		throw new Error(`Failed to fetch PRs: ${prsResult.stderr}`);
 	}
 
-	const allPRs: StackPR[] = JSON.parse(prsResult.stdout);
+	return JSON.parse(prsResult.stdout);
+}
 
-	// Step 2: Find connected PR stacks
-	const prStacks = findPRStacks(allPRs, baseBranch);
-
-	// Step 3: Check if we're in any of these stacks
+async function getAncestorBookmarks(
+	executor: CommandExecutor,
+): Promise<Set<string>> {
 	const ancestorResult = await executor.exec([
 		"jj",
 		"log",
@@ -50,69 +46,76 @@ export async function detectPRStack(
 		'bookmarks ++ "\n"',
 	]);
 
-	// Parse bookmarks in current ancestry
 	const bookmarkLines = ancestorResult.stdout
 		.split("\n")
 		.filter((line) => line.trim());
-	const ancestorBookmarks = new Set<string>();
 
-	for (const line of bookmarkLines) {
-		// Split by common separators and patterns
-		const parts = line.split(/[@\s]+/);
-		for (const part of parts) {
+	const ancestorBookmarks = new Set<string>();
+	bookmarkLines.forEach((line) => {
+		line.split(/[@\s]+/).forEach((part) => {
 			if (part && part !== "origin") {
 				ancestorBookmarks.add(part);
 			}
-		}
-	}
+		});
+	});
 
-	// Find the stack we're currently in (if any)
-	let currentStack: StackPR[] = [];
+	return ancestorBookmarks;
+}
+
+function findCurrentStack(
+	prStacks: StackPR[][],
+	ancestorBookmarks: Set<string>,
+): StackPR[] {
 	for (const stack of prStacks) {
-		// Check if any PR in this stack is in our ancestry
 		const inThisStack = stack.some((pr) =>
 			ancestorBookmarks.has(pr.headRefName),
 		);
 		if (inThisStack) {
-			currentStack = stack;
-			break;
+			return stack;
 		}
 	}
+	return [];
+}
 
-	// If we're not in any stack but there are stacks, we might need to navigate
-	if (currentStack.length === 0 && prStacks.length > 0) {
-		// Use the largest stack as the most likely one the user wants
-		currentStack = prStacks.reduce((largest, current) =>
-			current.length > largest.length ? current : largest,
-		);
+function selectLargestStack(prStacks: StackPR[][]): StackPR[] {
+	if (prStacks.length === 0) return [];
 
-		console.log(`\n📍 Found a PR stack but you're not currently in it.`);
-		console.log(
-			`   The stack contains ${currentStack.length} PRs starting from ${currentStack[0]?.headRefName}`,
-		);
-		console.log(
-			`   You may need to navigate to the stack with: jj new ${currentStack[currentStack.length - 1]?.headRefName}@origin\n`,
-		);
-	}
-
-	// Step 4: Sort PRs to form a chain (bottom to top)
-	const sortedPRs = currentStack;
-
-	// Step 5: Check which bookmarks exist locally
-	const bookmarkListResult = await executor.exec(["jj", "bookmark", "list"]);
-
-	const localBookmarks = new Set(
-		bookmarkListResult.stdout
-			.split("\n")
-			.filter((line) => line.trim())
-			.map((line) => {
-				// Extract bookmark name from lines like "bookmark: commit-hash description"
-				const match = line.match(/^([^:@\s]+):/);
-				return match ? match[1] : null;
-			})
-			.filter(Boolean),
+	const largest = prStacks.reduce((largest, current) =>
+		current.length > largest.length ? current : largest,
 	);
 
+	console.log(`\n📍 Found a PR stack but you're not currently in it.`);
+	console.log(
+		`   The stack contains ${largest.length} PRs starting from ${largest[0]?.headRefName}`,
+	);
+	console.log(
+		`   You may need to navigate to the stack with: jj new ${largest[largest.length - 1]?.headRefName}@origin\n`,
+	);
+
+	return largest;
+}
+
+async function getLocalBookmarks(
+	executor: CommandExecutor,
+): Promise<Set<string>> {
+	const bookmarkListResult = await executor.exec(["jj", "bookmark", "list"]);
+
+	const bookmarks = bookmarkListResult.stdout
+		.split("\n")
+		.filter((line) => line.trim())
+		.map((line) => {
+			const match = line.match(/^([^:@\s]+):/);
+			return match ? match[1] : null;
+		})
+		.filter((b): b is string => b !== null);
+
+	return new Set(bookmarks);
+}
+
+function categorizeBookmarks(
+	sortedPRs: StackPR[],
+	localBookmarks: Set<string>,
+): { missing: string[]; existing: string[] } {
 	const missingLocalBookmarks: string[] = [];
 	const existingLocalBookmarks: string[] = [];
 
@@ -125,25 +128,92 @@ export async function detectPRStack(
 	}
 
 	return {
-		prs: sortedPRs,
-		missingLocalBookmarks,
-		existingLocalBookmarks,
+		missing: missingLocalBookmarks,
+		existing: existingLocalBookmarks,
 	};
 }
 
-function findPRStacks(allPRs: StackPR[], baseBranch: string): StackPR[][] {
-	const stacks: StackPR[][] = [];
-	const processed = new Set<string>();
+export async function detectPRStack(
+	executor: CommandExecutor,
+	baseBranch: string = "master",
+): Promise<PRStackInfo> {
+	// Step 1: Get all PRs for the current user
+	const allPRs = await fetchUserPRs(executor);
 
-	// Build a map for quick lookups
+	// Step 2: Find connected PR stacks
+	const prStacks = findPRStacks(allPRs, baseBranch);
+
+	// Step 3: Check if we're in any of these stacks
+	const ancestorBookmarks = await getAncestorBookmarks(executor);
+
+	// Find the stack we're currently in (if any)
+	let currentStack = findCurrentStack(prStacks, ancestorBookmarks);
+
+	// If we're not in any stack but there are stacks, use the largest
+	if (currentStack.length === 0 && prStacks.length > 0) {
+		currentStack = selectLargestStack(prStacks);
+	}
+
+	// Step 4: Check which bookmarks exist locally
+	const localBookmarks = await getLocalBookmarks(executor);
+	const { missing, existing } = categorizeBookmarks(
+		currentStack,
+		localBookmarks,
+	);
+
+	return {
+		prs: currentStack,
+		missingLocalBookmarks: missing,
+		existingLocalBookmarks: existing,
+	};
+}
+
+function buildPRsByBase(allPRs: StackPR[]): Map<string, StackPR[]> {
 	const prsByBase = new Map<string, StackPR[]>();
-
 	for (const pr of allPRs) {
 		if (!prsByBase.has(pr.baseRefName)) {
 			prsByBase.set(pr.baseRefName, []);
 		}
 		prsByBase.get(pr.baseRefName)?.push(pr);
 	}
+	return prsByBase;
+}
+
+function buildStackFromRoot(
+	rootPR: StackPR,
+	prsByBase: Map<string, StackPR[]>,
+	processed: Set<string>,
+): StackPR[] {
+	const stack: StackPR[] = [];
+	let current: StackPR | undefined = rootPR;
+
+	while (current && !processed.has(current.headRefName)) {
+		stack.push(current);
+		processed.add(current.headRefName);
+		const children: StackPR[] = prsByBase.get(current.headRefName) || [];
+		current = children.find((pr: StackPR) => !processed.has(pr.headRefName));
+	}
+
+	return stack;
+}
+
+function addUnconnectedPRs(
+	allPRs: StackPR[],
+	processed: Set<string>,
+	stacks: StackPR[][],
+): void {
+	for (const pr of allPRs) {
+		if (!processed.has(pr.headRefName)) {
+			stacks.push([pr]);
+			processed.add(pr.headRefName);
+		}
+	}
+}
+
+function findPRStacks(allPRs: StackPR[], baseBranch: string): StackPR[][] {
+	const stacks: StackPR[][] = [];
+	const processed = new Set<string>();
+	const prsByBase = buildPRsByBase(allPRs);
 
 	// Find all stacks starting from PRs that base on master/main
 	const rootPRs = allPRs.filter(
@@ -152,34 +222,67 @@ function findPRStacks(allPRs: StackPR[], baseBranch: string): StackPR[][] {
 
 	for (const rootPR of rootPRs) {
 		if (processed.has(rootPR.headRefName)) continue;
-
-		// Build the stack starting from this root
-		const stack: StackPR[] = [];
-		let current: StackPR | undefined = rootPR;
-
-		while (current && !processed.has(current.headRefName)) {
-			stack.push(current);
-			processed.add(current.headRefName);
-
-			// Find PR that bases on current
-			const children: StackPR[] = prsByBase.get(current.headRefName) || [];
-			current = children.find((pr: StackPR) => !processed.has(pr.headRefName));
-		}
-
+		const stack = buildStackFromRoot(rootPR, prsByBase, processed);
 		if (stack.length > 0) {
 			stacks.push(stack);
 		}
 	}
 
 	// Add any remaining unconnected PRs as single-PR stacks
-	for (const pr of allPRs) {
-		if (!processed.has(pr.headRefName)) {
-			stacks.push([pr]);
-			processed.add(pr.headRefName);
-		}
+	addUnconnectedPRs(allPRs, processed, stacks);
+	return stacks;
+}
+
+async function fetchFromRemote(
+	executor: CommandExecutor,
+	dryRun: boolean,
+): Promise<{ success: boolean; error?: string }> {
+	if (dryRun) {
+		return { success: true };
 	}
 
-	return stacks;
+	const fetchResult = await executor.exec(["jj", "git", "fetch"]);
+	if (fetchResult.code !== 0) {
+		return {
+			success: false,
+			error: `Failed to fetch from remote: ${fetchResult.stderr}`,
+		};
+	}
+	return { success: true };
+}
+
+async function createBookmark(
+	executor: CommandExecutor,
+	bookmarkName: string,
+	dryRun: boolean,
+): Promise<boolean> {
+	const remoteRef = `${bookmarkName}@origin`;
+
+	if (dryRun) {
+		console.log(`  🔖 Would create: ${bookmarkName} tracking ${remoteRef}`);
+		return true;
+	}
+
+	const createResult = await executor.exec([
+		"jj",
+		"bookmark",
+		"create",
+		bookmarkName,
+		"-r",
+		remoteRef,
+	]);
+
+	if (createResult.code === 0) {
+		console.log(`  ✅ Created: ${bookmarkName} tracking ${remoteRef}`);
+		return true;
+	}
+
+	if (!createResult.stderr.includes("already exists")) {
+		console.error(
+			`  ❌ Failed to create ${bookmarkName}: ${createResult.stderr}`,
+		);
+	}
+	return false;
 }
 
 export async function reconcilePRBookmarks(
@@ -187,45 +290,22 @@ export async function reconcilePRBookmarks(
 	missingBookmarks: string[],
 	dryRun: boolean = false,
 ): Promise<{ success: boolean; createdBookmarks: string[]; error?: string }> {
-	const createdBookmarks: string[] = [];
-
 	// First, fetch from remote to ensure we have latest
-	if (!dryRun) {
-		const fetchResult = await executor.exec(["jj", "git", "fetch"]);
-		if (fetchResult.code !== 0) {
-			return {
-				success: false,
-				createdBookmarks: [],
-				error: `Failed to fetch from remote: ${fetchResult.stderr}`,
-			};
-		}
+	const fetchResult = await fetchFromRemote(executor, dryRun);
+	if (!fetchResult.success) {
+		return {
+			success: false,
+			createdBookmarks: [],
+			error: fetchResult.error,
+		};
 	}
 
 	// Create local bookmarks for each missing one
+	const createdBookmarks: string[] = [];
 	for (const bookmarkName of missingBookmarks) {
-		const remoteRef = `${bookmarkName}@origin`;
-
-		if (dryRun) {
-			console.log(`  🔖 Would create: ${bookmarkName} tracking ${remoteRef}`);
+		const created = await createBookmark(executor, bookmarkName, dryRun);
+		if (created) {
 			createdBookmarks.push(bookmarkName);
-		} else {
-			const createResult = await executor.exec([
-				"jj",
-				"bookmark",
-				"create",
-				bookmarkName,
-				"-r",
-				remoteRef,
-			]);
-
-			if (createResult.code === 0) {
-				console.log(`  ✅ Created: ${bookmarkName} tracking ${remoteRef}`);
-				createdBookmarks.push(bookmarkName);
-			} else if (!createResult.stderr.includes("already exists")) {
-				console.error(
-					`  ❌ Failed to create ${bookmarkName}: ${createResult.stderr}`,
-				);
-			}
 		}
 	}
 

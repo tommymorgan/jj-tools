@@ -2,7 +2,9 @@ import { assertEquals } from "@std/assert";
 import { describe, it } from "@std/testing/bdd";
 import { AutoBookmarkManager } from "../src/auto_bookmark.ts";
 import {
-	JJTestDataGenerator,
+	createMockExecutor,
+	generateProblematicHistory,
+	generateWorkingStack,
 	REAL_WORLD_SCENARIOS,
 } from "./test_data_generators.ts";
 
@@ -16,7 +18,7 @@ describe("Auto-bookmark scope limitation", () => {
 				history.map((h) => [h.changeId, h.description]),
 			);
 
-			const mockExecutor = JJTestDataGenerator.createMockExecutor({
+			const mockExecutor = createMockExecutor({
 				logOutput: history,
 				showDescriptions,
 				trunk: "master",
@@ -40,12 +42,12 @@ describe("Auto-bookmark scope limitation", () => {
 	describe("should only create bookmarks for mutable working stack", () => {
 		it("should exclude immutable commits when detecting unbookmarked changes", async () => {
 			// Generate a history with both mutable and immutable commits
-			const mutableCommits = JJTestDataGenerator.generateWorkingStack({
+			const mutableCommits = generateWorkingStack({
 				numCommits: 2,
 				hasBookmarks: false,
 			});
 
-			const immutableCommits = JJTestDataGenerator.generateProblematicHistory({
+			const immutableCommits = generateProblematicHistory({
 				numWorkingCommits: 0,
 				numMergedCommits: 5,
 			}).slice(0, 5); // Just the merged commits
@@ -53,7 +55,7 @@ describe("Auto-bookmark scope limitation", () => {
 			const allCommits = [...mutableCommits, ...immutableCommits];
 			const immutableIds = immutableCommits.map((c) => c.changeId);
 
-			const mockExecutor = JJTestDataGenerator.createMockExecutor({
+			const mockExecutor = createMockExecutor({
 				logOutput: allCommits,
 				trunk: "master",
 				immutableCommits: immutableIds,
