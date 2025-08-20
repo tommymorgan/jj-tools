@@ -16,6 +16,7 @@ import {
 	type PRInfo,
 	PullRequestManager,
 } from "./pr_manager.ts";
+import { detectPRStack, reconcilePRBookmarks } from "./pr_stack_detector.ts";
 import {
 	installBrokenPipeHandlers,
 	safeError,
@@ -24,7 +25,9 @@ import {
 import {
 	type CommandExecutor,
 	detectStack,
+	detectStackWithRemotes,
 	hasConflicts,
+	reconcileRemoteBookmarks,
 	type StackInfo,
 } from "./stack_detection.ts";
 import { showVersion } from "./version.ts";
@@ -431,16 +434,169 @@ async function processStack(ctx: AppContext): Promise<void> {
 	await processPRs(ctx, stack);
 }
 
+async function handleRemoteBookmarksIfNeeded(ctx: AppContext): Promise<void> {
+	const stackWithRemotes = await detectStackWithRemotes(
+		ctx.executor,
+		ctx.options.baseBranch,
+	);
+
+	if (!stackWithRemotes.hasRemoteOnlyBookmarks) {
+		return;
+	}
+
+	const reconcileResult = await handleRemoteOnlyBookmarks(
+		ctx.executor,
+		ctx.options.baseBranch,
+		ctx.options.dryRun,
+	);
+
+	if (!reconcileResult.success) {
+		safeError(
+			`❌ Failed to reconcile remote bookmarks: ${reconcileResult.error || "Unknown error"}`,
+		);
+		Deno.exit(1);
+	}
+
+	if (reconcileResult.reconciledBookmarks.length > 0) {
+		safeLog(
+			`✅ Created ${reconcileResult.reconciledBookmarks.length} local bookmark(s) tracking remotes`,
+		);
+
+		// In dry-run mode with reconciled bookmarks, we can't continue
+		// because the bookmarks weren't actually created
+		if (ctx.options.dryRun) {
+			safeLog(
+				"\n✅ Would have successfully created PR stack after reconciliation",
+			);
+			safeLog("(This was a dry run - no changes were made)");
+			Deno.exit(0);
+		}
+	}
+}
+
 async function detectAndValidateStack(ctx: AppContext): Promise<StackInfo> {
 	safeLog("🔍 Detecting stack...");
 
 	// Check for non-linear stacks (BUG-004)
 	await ensureLinearStack(ctx.executor);
 
+	// Handle remote-only bookmarks if needed
+	await handleRemoteBookmarksIfNeeded(ctx);
+
 	const stack = await detectStack(ctx.executor, ctx.options.baseBranch);
 	validateStackBookmarks(stack, ctx.options);
 	safeLog(`📚 Found stack with ${stack.bookmarks.length} bookmark(s)`);
 	return stack;
+}
+
+// Handle remote-only bookmarks by creating local tracking bookmarks
+export async function handleRemoteOnlyBookmarks(
+	executor: CommandExecutor,
+	baseBranch: string,
+	dryRun: boolean,
+): Promise<{
+	success: boolean;
+	reconciledBookmarks: string[];
+	error?: string;
+}> {
+	// Use PR-aware stack detection
+	try {
+		const prStackInfo = await detectPRStack(executor, baseBranch);
+
+		// If no missing bookmarks, nothing to do
+		if (prStackInfo.missingLocalBookmarks.length === 0) {
+			return { success: true, reconciledBookmarks: [] };
+		}
+
+		safeLog("\n⚠️  Detected PR stack with missing local bookmarks!");
+		safeLog(
+			"  This typically happens when you switch computers after pushing a stack.",
+		);
+
+		// Show the PR stack
+		if (prStackInfo.prs.length > 0) {
+			safeLog("\n  PR Stack found:");
+			for (let i = 0; i < prStackInfo.prs.length; i++) {
+				const pr = prStackInfo.prs[i];
+				const hasLocal = prStackInfo.existingLocalBookmarks.includes(
+					pr.headRefName,
+				);
+				safeLog(
+					`    ${i + 1}. #${pr.number}: ${pr.headRefName} → ${pr.baseRefName} ${hasLocal ? "✅" : "❌ missing"}`,
+				);
+			}
+		}
+
+		safeLog(
+			`\n  Missing ${prStackInfo.missingLocalBookmarks.length} local bookmark(s):`,
+		);
+		for (const bookmark of prStackInfo.missingLocalBookmarks) {
+			safeLog(`    - ${bookmark}`);
+		}
+
+		if (dryRun) {
+			safeLog(
+				"\n  🔍 DRY RUN: Would create local bookmarks tracking these remotes",
+			);
+			return {
+				success: true,
+				reconciledBookmarks: prStackInfo.missingLocalBookmarks,
+			};
+		}
+
+		safeLog("\n  Creating local bookmarks to track remotes...");
+
+		// Use the PR-aware reconciliation
+		const result = await reconcilePRBookmarks(
+			executor,
+			prStackInfo.missingLocalBookmarks,
+			dryRun,
+		);
+
+		if (result.success) {
+			return {
+				success: true,
+				reconciledBookmarks: result.createdBookmarks,
+			};
+		}
+
+		return {
+			success: false,
+			reconciledBookmarks: [],
+			error: result.error,
+		};
+	} catch (e) {
+		// Fall back to the original detection if PR detection fails
+		const stackInfo = await detectStackWithRemotes(executor, baseBranch);
+
+		if (!stackInfo.hasRemoteOnlyBookmarks) {
+			return { success: true, reconciledBookmarks: [] };
+		}
+
+		// Use original logic as fallback
+		safeLog("\n⚠️  Detected remote-only bookmarks in the stack!");
+		safeLog("  Remote bookmarks found:");
+		for (const remote of stackInfo.remoteBookmarks) {
+			safeLog(`    - ${remote.name}@${remote.remote}`);
+		}
+
+		if (dryRun) {
+			safeLog(
+				"\n  🔍 DRY RUN: Would create local bookmarks tracking these remotes",
+			);
+			return {
+				success: true,
+				reconciledBookmarks: stackInfo.remoteBookmarks.map((r) => r.name),
+			};
+		}
+
+		const result = await reconcileRemoteBookmarks(executor, baseBranch, dryRun);
+		return {
+			success: result.success,
+			reconciledBookmarks: result.createdBookmarks,
+			error: result.error,
+		};
+	}
 }
 
 async function ensureLinearStack(executor: CommandExecutor): Promise<void> {

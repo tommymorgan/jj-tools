@@ -41,6 +41,20 @@ function handleShowCommandWithMapping(
 	return null;
 }
 
+// Test helper for reconciliation test commands
+function getReconcileResponse(cmdStr: string, logOutput: string) {
+	if (cmdStr.includes("log") && cmdStr.includes("bookmarks")) {
+		return createMockResponse(logOutput);
+	}
+	if (
+		cmdStr.includes("jj bookmark create") ||
+		cmdStr.includes("jj git fetch")
+	) {
+		return createMockResponse("");
+	}
+	return createMockResponse("", "Unknown command", 1);
+}
+
 // Helper function to create simple mock executor
 function createMockExecutor(
 	logOutput: string,
@@ -234,6 +248,92 @@ describe("Stack Detection", () => {
 				bookmarkNames.some((n) => n.includes("@")),
 				false,
 			);
+		});
+	});
+
+	describe("remote bookmark detection", () => {
+		it("should detect when stack contains only remote bookmarks and provide them for reconciliation", async () => {
+			// Arrange - simulating a stack where bookmarks exist on remote but not locally
+			// This happens when you switch computers and haven't created local tracking bookmarks
+			const logOutput = `feat/pr-risk-schemas@origin
+auto/jjsp-update-dependencies-across-eng-sukvuq@origin
+auto/jjsp-add-pr-file-count-distribution-nmvlyp@origin
+feat/cm-pr-approval-time@origin
+feat/github-lib@origin
+docs/cm-remove-fix-on-fix@origin`;
+
+			const mockExecutor = createMockExecutor(logOutput);
+
+			// Act
+			const { detectStackWithRemotes } = await import(
+				"../src/stack_detection.ts"
+			);
+			const result = await detectStackWithRemotes(mockExecutor);
+
+			// Assert - The new function should detect remote-only bookmarks
+			assertEquals(result.hasRemoteOnlyBookmarks, true);
+			assertEquals(result.remoteBookmarks.length, 6);
+			assertEquals(result.localBookmarks.length, 0);
+
+			// Remote bookmarks should be in the correct order (bottom to top)
+			assertEquals(result.remoteBookmarks[0].name, "docs/cm-remove-fix-on-fix");
+			assertEquals(result.remoteBookmarks[0].remote, "origin");
+			assertEquals(result.remoteBookmarks[1].name, "feat/github-lib");
+			assertEquals(result.remoteBookmarks[2].name, "feat/cm-pr-approval-time");
+			assertEquals(
+				result.remoteBookmarks[3].name,
+				"auto/jjsp-add-pr-file-count-distribution-nmvlyp",
+			);
+			assertEquals(
+				result.remoteBookmarks[4].name,
+				"auto/jjsp-update-dependencies-across-eng-sukvuq",
+			);
+			assertEquals(result.remoteBookmarks[5].name, "feat/pr-risk-schemas");
+		});
+
+		it("should create local bookmarks tracking remote ones when reconciliation is requested", async () => {
+			// Arrange - Stack with only remote bookmarks
+			const logOutput = `feat/feature-c@origin
+feat/feature-b@origin
+feat/feature-a@origin`;
+
+			const executedCommands: string[][] = [];
+
+			const mockExecutor: CommandExecutor = {
+				exec: async (cmd: string[]) => {
+					executedCommands.push(cmd);
+					return getReconcileResponse(cmd.join(" "), logOutput);
+				},
+			};
+
+			// Act
+			const { reconcileRemoteBookmarks } = await import(
+				"../src/stack_detection.ts"
+			);
+			const result = await reconcileRemoteBookmarks(mockExecutor);
+
+			// Assert
+			assertEquals(result.success, true);
+			assertEquals(result.createdBookmarks.length, 3);
+			assertEquals(result.createdBookmarks[0], "feat/feature-a");
+			assertEquals(result.createdBookmarks[1], "feat/feature-b");
+			assertEquals(result.createdBookmarks[2], "feat/feature-c");
+
+			// Verify the correct jj commands were executed
+			const bookmarkCreateCommands = executedCommands.filter(
+				(cmd) =>
+					cmd[0] === "jj" && cmd[1] === "bookmark" && cmd[2] === "create",
+			);
+			assertEquals(bookmarkCreateCommands.length, 3);
+
+			// Check that bookmarks were created with correct names tracking remote
+			assertEquals(bookmarkCreateCommands[0].includes("feat/feature-a"), true);
+			assertEquals(
+				bookmarkCreateCommands[0].includes("feat/feature-a@origin"),
+				true,
+			);
+			assertEquals(bookmarkCreateCommands[1].includes("feat/feature-b"), true);
+			assertEquals(bookmarkCreateCommands[2].includes("feat/feature-c"), true);
 		});
 	});
 

@@ -5,8 +5,22 @@ export interface Bookmark {
 	isCurrent?: boolean;
 }
 
+export interface RemoteBookmark {
+	name: string;
+	remote: string;
+	commitHash?: string;
+	commitMessage?: string;
+}
+
 export interface StackInfo {
 	bookmarks: Bookmark[];
+	currentPosition?: number;
+}
+
+export interface StackWithRemotesInfo {
+	localBookmarks: Bookmark[];
+	remoteBookmarks: RemoteBookmark[];
+	hasRemoteOnlyBookmarks: boolean;
 	currentPosition?: number;
 }
 
@@ -304,5 +318,254 @@ export async function hasConflicts(
 	return {
 		hasConflicts: conflictedCommits.length > 0,
 		conflictedCommits,
+	};
+}
+
+function parseBookmarkWithRemote(
+	name: string,
+): { name: string; remote?: string } | null {
+	// Check if this is a remote bookmark (e.g., bookmark@origin)
+	if (name.includes("@")) {
+		const parts = name.split("@");
+		if (parts.length === 2) {
+			return {
+				name: parts[0].replace("*", ""),
+				remote: parts[1],
+			};
+		}
+	}
+
+	// Local bookmark
+	const cleanName = name.replace("*", "");
+	return { name: cleanName };
+}
+
+function processRemoteBookmarkName(
+	name: string,
+	baseBranch: string,
+	localBookmarks: Bookmark[],
+	remoteBookmarks: RemoteBookmark[],
+): number | undefined {
+	const parsed = parseBookmarkWithRemote(name);
+	if (!parsed || parsed.name === baseBranch) {
+		return undefined;
+	}
+
+	const isCurrent = name.includes("*");
+
+	if (parsed.remote) {
+		remoteBookmarks.push({
+			name: parsed.name,
+			remote: parsed.remote,
+		});
+		return undefined;
+	}
+
+	const position = isCurrent ? localBookmarks.length : undefined;
+	localBookmarks.push({
+		name: parsed.name,
+		isCurrent,
+	});
+	return position;
+}
+
+function processBookmarkLines(
+	lines: string[],
+	baseBranch: string,
+	localBookmarks: Bookmark[],
+	remoteBookmarks: RemoteBookmark[],
+): number | undefined {
+	let currentPosition: number | undefined;
+
+	for (const line of lines) {
+		const position = processLineBookmarks(
+			line,
+			baseBranch,
+			localBookmarks,
+			remoteBookmarks,
+		);
+		if (position !== undefined) {
+			currentPosition = position;
+		}
+	}
+
+	return currentPosition;
+}
+
+function processLineBookmarks(
+	line: string,
+	baseBranch: string,
+	localBookmarks: Bookmark[],
+	remoteBookmarks: RemoteBookmark[],
+): number | undefined {
+	const bookmarkNames = parseBookmarkLine(line);
+	let position: number | undefined;
+
+	for (const name of bookmarkNames) {
+		const newPosition = processRemoteBookmarkName(
+			name,
+			baseBranch,
+			localBookmarks,
+			remoteBookmarks,
+		);
+		if (newPosition !== undefined) {
+			position = newPosition;
+		}
+	}
+
+	return position;
+}
+
+function parseBookmarksWithRemotes(
+	logOutput: string,
+	baseBranch: string,
+): {
+	localBookmarks: Bookmark[];
+	remoteBookmarks: RemoteBookmark[];
+	currentPosition?: number;
+} {
+	const lines = logOutput.split("\n").reverse();
+	const localBookmarks: Bookmark[] = [];
+	const remoteBookmarks: RemoteBookmark[] = [];
+
+	const currentPosition = processBookmarkLines(
+		lines,
+		baseBranch,
+		localBookmarks,
+		remoteBookmarks,
+	);
+
+	return { localBookmarks, remoteBookmarks, currentPosition };
+}
+
+export async function detectStackWithRemotes(
+	executor: CommandExecutor,
+	baseBranch: string = "master",
+): Promise<StackWithRemotesInfo> {
+	// Get jj log output
+	const logOutput = await getJjLogOutput(executor);
+
+	// Parse bookmarks including remotes
+	const { localBookmarks, remoteBookmarks, currentPosition } =
+		parseBookmarksWithRemotes(logOutput, baseBranch);
+
+	// Enrich bookmarks with commit messages if we have local bookmarks
+	if (localBookmarks.length > 0) {
+		await enrichBookmarksWithMessages(executor, localBookmarks);
+		assignCommitHashes(localBookmarks);
+	}
+
+	// For remote bookmarks, we could also fetch their commit messages
+	// but for now we'll keep it simple
+
+	return {
+		localBookmarks,
+		remoteBookmarks,
+		hasRemoteOnlyBookmarks:
+			localBookmarks.length === 0 && remoteBookmarks.length > 0,
+		currentPosition,
+	};
+}
+
+export interface ReconcileResult {
+	success: boolean;
+	createdBookmarks: string[];
+	error?: string;
+}
+
+async function fetchFromRemote(
+	executor: CommandExecutor,
+	dryRun: boolean,
+): Promise<ReconcileResult | null> {
+	if (dryRun) {
+		return null;
+	}
+
+	const fetchResult = await executor.exec(["jj", "git", "fetch"]);
+	if (fetchResult.code !== 0) {
+		return {
+			success: false,
+			createdBookmarks: [],
+			error: `Failed to fetch from remote: ${fetchResult.stderr}`,
+		};
+	}
+	return null;
+}
+
+async function createLocalBookmark(
+	executor: CommandExecutor,
+	bookmarkName: string,
+	remoteName: string,
+	dryRun: boolean,
+): Promise<boolean> {
+	if (dryRun) {
+		return true;
+	}
+
+	const createResult = await executor.exec([
+		"jj",
+		"bookmark",
+		"create",
+		bookmarkName,
+		"-r",
+		remoteName,
+	]);
+
+	if (createResult.code !== 0) {
+		// It's possible the bookmark already exists, which is okay
+		return createResult.stderr.includes("already exists");
+	}
+	return true;
+}
+
+export async function reconcileRemoteBookmarks(
+	executor: CommandExecutor,
+	baseBranch: string = "master",
+	dryRun: boolean = false,
+): Promise<ReconcileResult> {
+	// First detect the current stack situation
+	const stackInfo = await detectStackWithRemotes(executor, baseBranch);
+
+	if (!stackInfo.hasRemoteOnlyBookmarks) {
+		return {
+			success: true,
+			createdBookmarks: [],
+		};
+	}
+
+	// Fetch latest from remote
+	const fetchError = await fetchFromRemote(executor, dryRun);
+	if (fetchError) {
+		return fetchError;
+	}
+
+	const createdBookmarks: string[] = [];
+
+	// Create local bookmarks tracking the remote ones
+	for (const remoteBookmark of stackInfo.remoteBookmarks) {
+		const bookmarkName = remoteBookmark.name;
+		const remoteName = `${bookmarkName}@${remoteBookmark.remote}`;
+
+		const success = await createLocalBookmark(
+			executor,
+			bookmarkName,
+			remoteName,
+			dryRun,
+		);
+
+		if (!success) {
+			return {
+				success: false,
+				createdBookmarks,
+				error: `Failed to create bookmark ${bookmarkName}`,
+			};
+		}
+
+		createdBookmarks.push(bookmarkName);
+	}
+
+	return {
+		success: true,
+		createdBookmarks,
 	};
 }

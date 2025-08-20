@@ -37,12 +37,13 @@ export class AutoBookmarkManager {
 	}
 
 	private async getChangeLog(): Promise<string | null> {
+		// Only get mutable commits in the current stack, not all descendants of trunk
 		const result = await this.executor.exec([
 			"jj",
 			"log",
 			"--no-graph",
 			"-r",
-			"(::@ | @::) & trunk()..",
+			"::@ ~ immutable()",
 			"--template",
 			'change_id ++ " " ++ bookmarks ++ "\\n"',
 		]);
