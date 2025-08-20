@@ -9,7 +9,8 @@
 		"enabled": true
 	},
 	"files": {
-		"ignoreUnknown": false
+		"ignoreUnknown": false,
+		"experimentalScannerIgnores": [".jj", ".claude"]
 	},
 	"formatter": {
 		"enabled": true

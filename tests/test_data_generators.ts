@@ -1,4 +1,4 @@
-import { z } from "npm:zod@3";
+import { z } from "npm:zod@4";
 
 // Schema for jj log output line format: "changeId bookmarks description"
 export const JJLogLineSchema = z.object({
