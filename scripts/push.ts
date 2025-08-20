@@ -96,6 +96,16 @@ async function moveMainBookmark(): Promise<void> {
 	}
 }
 
+async function hasDescription(): Promise<boolean> {
+	const result = await exec(["jj", "log", "-r", "@", "--no-graph", "-T", "description"]);
+	return result.stdout.trim() !== "" && !result.stdout.includes("(no description set)");
+}
+
+async function isEmptyCommit(): Promise<boolean> {
+	const result = await exec(["jj", "log", "-r", "@", "--no-graph", "-T", "empty"]);
+	return result.stdout.trim() === "true";
+}
+
 async function pushToGitHub(): Promise<void> {
 	console.log("🚀 Pushing to GitHub...");
 	const result = await exec(["jj", "git", "push"]);
@@ -107,6 +117,20 @@ async function pushToGitHub(): Promise<void> {
 
 async function main() {
 	try {
+		// Check if current commit is pushable
+		const hasDesc = await hasDescription();
+		const isEmpty = await isEmptyCommit();
+		
+		if (!hasDesc) {
+			console.error("❌ Current commit has no description. Please describe your changes:");
+			console.error("   jj describe -m \"your commit message\"");
+			Deno.exit(1);
+		}
+		
+		if (isEmpty && hasDesc) {
+			console.log("⚠️  Warning: Pushing an empty commit");
+		}
+		
 		// Get current and previous versions
 		const currentVersion = await getCurrentVersion();
 		console.log(`📦 Current version: ${currentVersion}`);
@@ -123,10 +147,8 @@ async function main() {
 				
 				await updateVersion(newVersion);
 				
-				// Amend the commit if there are changes
-				if (await hasUncommittedChanges()) {
-					await amendCommit();
-				}
+				// Amend the commit with the version bump
+				await amendCommit();
 			} else {
 				const currentParsed = parseVersion(currentVersion);
 				const previousParsed = parseVersion(previousVersion);
