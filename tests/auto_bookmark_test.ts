@@ -11,12 +11,10 @@ import {
 } from "../src/auto_bookmark.ts";
 import type { CommandExecutor } from "../src/stack_detection.ts";
 
-// Helper function to create mock responses
 function createMockResponse(stdout: string, stderr = "", code = 0) {
 	return { stdout, stderr, code };
 }
 
-// Helper function to handle jj log commands
 function handleLogCommand(cmd: string[], logOutput: string) {
 	if (cmd.includes("log") && cmd.some((c) => c.includes("change_id"))) {
 		return createMockResponse(logOutput);
@@ -24,7 +22,6 @@ function handleLogCommand(cmd: string[], logOutput: string) {
 	return null;
 }
 
-// Helper function to handle jj show commands with change ID mapping
 function handleShowCommand(
 	cmd: string[],
 	changeIdToMessageMap: Record<string, string>,
@@ -42,7 +39,6 @@ function handleShowCommand(
 	return null;
 }
 
-// Helper function to handle jj bookmark list commands
 function handleBookmarkListCommand(cmd: string[], bookmarkOutput: string) {
 	if (cmd.includes("bookmark") && cmd.includes("list")) {
 		return createMockResponse(bookmarkOutput);
@@ -50,7 +46,6 @@ function handleBookmarkListCommand(cmd: string[], bookmarkOutput: string) {
 	return null;
 }
 
-// Helper function to handle jj pr view commands with state mapping
 function handlePrViewCommand(
 	cmd: string[],
 	bookmarkToStateMap: Record<string, string>,
@@ -69,7 +64,6 @@ function handlePrViewCommand(
 	return createMockResponse("", "no pull requests found", 1);
 }
 
-// Helper function to handle jj bookmark delete commands
 function handleBookmarkDeleteCommand(
 	cmd: string[],
 	deletedBookmarks: string[],
@@ -82,7 +76,6 @@ function handleBookmarkDeleteCommand(
 	return null;
 }
 
-// Helper function to handle jj bookmark forget commands
 function handleBookmarkForgetCommand(
 	cmd: string[],
 	forgottenBookmarks: string[],
@@ -95,7 +88,6 @@ function handleBookmarkForgetCommand(
 	return null;
 }
 
-// Helper function to create mock executor for findUnbookmarkedChanges tests
 function createFindUnbookmarkedMockExecutor(
 	logOutput: string,
 	showMap: Record<string, string>,
@@ -111,7 +103,6 @@ function createFindUnbookmarkedMockExecutor(
 	};
 }
 
-// Helper function to create mock executor for cleanup tests
 function createCleanupMockExecutor(
 	prStateMap: Record<string, string>,
 	deletedBookmarks: string[],

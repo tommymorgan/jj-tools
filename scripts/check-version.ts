@@ -47,15 +47,12 @@ async function getPreviousVersion(): Promise<string | null> {
 
 		let ref: string;
 		if (isGitHubPushEvent) {
-			// Get version from parent commit
 			ref = "HEAD~1:deno.json";
 		} else {
-			// Get the default branch name for other cases
 			const defaultBranch = await getGitDefaultBranch();
 			ref = `origin/${defaultBranch}:deno.json`;
 		}
 
-		// Get version from the determined ref
 		const cmd = new Deno.Command("git", {
 			args: ["show", ref],
 			stdout: "piped",

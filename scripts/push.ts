@@ -2,7 +2,6 @@
 
 import { parse as parseVersion, compare } from "@std/semver";
 
-// Check for verbose flag
 const VERBOSE = Deno.args.includes("--verbose") || Deno.args.includes("-v");
 
 interface CommandResult {
@@ -134,7 +133,6 @@ async function main() {
 			console.log("⚠️  Warning: Pushing an empty commit");
 		}
 		
-		// Get current and previous versions
 		const currentVersion = await getCurrentVersion();
 		console.log(`📦 Current version: ${currentVersion}`);
 
@@ -143,7 +141,6 @@ async function main() {
 		if (previousVersion) {
 			console.log(`📦 Previous main version: ${previousVersion}`);
 			
-			// Check if version needs bumping
 			if (currentVersion === previousVersion) {
 				const newVersion = await bumpPatchVersion(currentVersion);
 				console.log(`⬆️  Bumping version: ${currentVersion} → ${newVersion}`);
@@ -172,12 +169,10 @@ async function main() {
 			console.log("✅ No previous version to compare (first release)");
 		}
 
-		// Ensure we're on main bookmark
 		if (!await isOnMainBookmark()) {
 			await moveMainBookmark();
 		}
 
-		// Push to GitHub
 		await pushToGitHub();
 		
 		console.log("✨ Successfully pushed to GitHub!");

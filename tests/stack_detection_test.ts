@@ -2,12 +2,10 @@ import { assertEquals, assertExists, assertRejects } from "@std/assert";
 import { describe, it } from "@std/testing/bdd";
 import { type CommandExecutor, detectStack } from "../src/stack_detection.ts";
 
-// Helper function to create mock responses
 function createMockResponse(stdout: string, stderr = "", code = 0) {
 	return { stdout, stderr, code };
 }
 
-// Helper function to handle jj log commands
 function handleLogCommand(cmd: string[], logOutput: string) {
 	if (cmd.includes("log") && cmd.some((c) => c.includes("bookmarks"))) {
 		return createMockResponse(logOutput);
@@ -15,7 +13,6 @@ function handleLogCommand(cmd: string[], logOutput: string) {
 	return null;
 }
 
-// Helper function to handle jj show commands
 function handleShowCommand(cmd: string[], showOutput: string) {
 	if (cmd.includes("show")) {
 		return createMockResponse(showOutput);
@@ -23,7 +20,6 @@ function handleShowCommand(cmd: string[], showOutput: string) {
 	return null;
 }
 
-// Helper function to handle jj show commands with bookmark-specific responses
 function handleShowCommandWithMapping(
 	cmd: string[],
 	bookmarkToMessageMap: Record<string, string>,
@@ -41,7 +37,6 @@ function handleShowCommandWithMapping(
 	return null;
 }
 
-// Test helper for reconciliation test commands
 function getReconcileResponse(cmdStr: string, logOutput: string) {
 	if (cmdStr.includes("log") && cmdStr.includes("bookmarks")) {
 		return createMockResponse(logOutput);
@@ -55,7 +50,6 @@ function getReconcileResponse(cmdStr: string, logOutput: string) {
 	return createMockResponse("", "Unknown command", 1);
 }
 
-// Helper function to create simple mock executor
 function createMockExecutor(
 	logOutput: string,
 	showOutput = "feat: test",
@@ -71,7 +65,6 @@ function createMockExecutor(
 	};
 }
 
-// Helper function to create mock executor with bookmark-specific messages
 function createMockExecutorWithMapping(
 	logOutput: string,
 	showMapping: Record<string, string>,

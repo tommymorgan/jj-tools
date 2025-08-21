@@ -2,12 +2,10 @@ import { assertEquals } from "@std/assert";
 import { describe, it } from "@std/testing/bdd";
 import { type CommandExecutor, detectStack } from "../src/stack_detection.ts";
 
-// Helper function to create mock responses
 function createMockResponse(stdout: string, stderr = "", code = 0) {
 	return { stdout, stderr, code };
 }
 
-// Helper to create a mock executor
 function createMockExecutor(
 	logOutput: string,
 	showOutput = "feat: test",

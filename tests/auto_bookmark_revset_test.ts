@@ -3,12 +3,10 @@ import { describe, it } from "@std/testing/bdd";
 import { findUnbookmarkedChanges } from "../src/auto_bookmark.ts";
 import type { CommandExecutor } from "../src/stack_detection.ts";
 
-// Helper function to create mock responses
 function createMockResponse(stdout: string, stderr = "", code = 0) {
 	return { stdout, stderr, code };
 }
 
-// Helper function to handle jj log commands
 function handleLogCommand(cmd: string[], logOutput: string) {
 	if (cmd.includes("log") && cmd.some((c) => c.includes("change_id"))) {
 		// Don't assert on the specific revset - just return the mock output
@@ -18,7 +16,6 @@ function handleLogCommand(cmd: string[], logOutput: string) {
 	return null;
 }
 
-// Helper function to handle jj show commands
 function handleShowCommand(
 	cmd: string[],
 	changeIdToMessageMap: Record<string, string>,
@@ -42,7 +39,6 @@ function handleShowCommand(
 	return null;
 }
 
-// Helper function to create mock executor for revset tests
 function createRevsetMockExecutor(
 	logOutput: string,
 	showMap: Record<string, string> = {},

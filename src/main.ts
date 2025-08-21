@@ -53,7 +53,6 @@ import {
 } from "./stack_detection.ts";
 import { showVersion } from "./version.ts";
 
-// Real command executor that runs system commands
 export function createSystemCommandExecutor(): CommandExecutor {
 	return {
 		async exec(
@@ -76,7 +75,6 @@ export function createSystemCommandExecutor(): CommandExecutor {
 	};
 }
 
-// Helper functions to reduce complexity
 function handleHelpAndVersion(options: CLIOptions): void {
 	if (options.help) {
 		safeLog(showHelp());
@@ -410,22 +408,11 @@ interface AppContext {
 }
 
 async function processStack(ctx: AppContext): Promise<void> {
-	// Step 1: Clean up auto bookmarks
 	await cleanupAutoBookmarks(ctx.options, ctx.executor);
-
-	// Step 2: Handle unbookmarked changes
 	await handleUnbookmarkedChanges(ctx.options, ctx.executor);
-
-	// Step 3: Detect and validate stack
 	const stack = await detectAndValidateStack(ctx);
-
-	// Step 4: Check for conflicts before attempting to push
 	await checkForConflicts(ctx);
-
-	// Step 5: Push bookmarks to GitHub
 	await pushBookmarksToGitHub(ctx.options, ctx.executor);
-
-	// Step 6: Process PRs
 	await processPRs(ctx, stack);
 }
 
@@ -479,7 +466,6 @@ async function detectAndValidateStack(ctx: AppContext): Promise<StackInfo> {
 	// Check for non-linear stacks (BUG-004)
 	await ensureLinearStack(ctx.executor);
 
-	// Handle remote-only bookmarks if needed
 	await handleRemoteBookmarksIfNeeded(ctx);
 
 	const stack = await detectStack(ctx.executor, ctx.options.baseBranch);
@@ -592,7 +578,6 @@ async function handleFallbackDetection(
 	};
 }
 
-// Handle remote-only bookmarks by creating local tracking bookmarks
 export async function handleRemoteOnlyBookmarks(
 	executor: CommandExecutor,
 	baseBranch: string,
@@ -715,7 +700,6 @@ async function main() {
 
 	const options = parseArguments(Deno.args);
 
-	// Set verbose mode if requested
 	setVerboseMode(options.verbose);
 
 	handleHelpAndVersion(options);
@@ -726,7 +710,6 @@ async function main() {
 	// Validate GitHub authentication early (BUG-006)
 	await validateGitHubAuthOrExit(executor, options.dryRun);
 
-	// Auto-detect base branch if not provided
 	if (!options.baseBranch) {
 		const detectedBase = await detectBaseBranch(executor);
 		if (detectedBase) {
@@ -752,7 +735,6 @@ async function main() {
 	}
 }
 
-// Run main function
 if (import.meta.main) {
 	await main();
 }

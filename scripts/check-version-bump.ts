@@ -142,7 +142,6 @@ function handleVersionDecreased(
 async function main() {
 	const isCI = Deno.env.get("CI") === "true";
 
-	// Get current version
 	const currentVersion = await getCurrentVersion();
 	if (!currentVersion) {
 		exitWithError("❌ ERROR: Could not read version from deno.json", [
@@ -150,7 +149,6 @@ async function main() {
 		]);
 	}
 
-	// Get previous version
 	const previousVersion = await getVersionFromCommit("@-");
 	if (!previousVersion) {
 		console.log(
@@ -160,11 +158,9 @@ async function main() {
 		Deno.exit(0);
 	}
 
-	// Parse versions
 	const currentSemver = parseVersionOrExit(currentVersion, "Current");
 	const previousSemver = parseVersionOrExit(previousVersion, "Previous");
 
-	// Compare and handle results
 	const comparison = compare(currentSemver, previousSemver);
 
 	if (comparison > 0) {
