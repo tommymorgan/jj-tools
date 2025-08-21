@@ -150,8 +150,12 @@ async function main() {
 				
 				await updateVersion(newVersion);
 				
-				// Amend the commit with the version bump
-				await amendCommit();
+				// Only amend if we're already on main (otherwise we'd try to squash into an immutable commit)
+				if (await isOnMainBookmark()) {
+					await amendCommit();
+				} else {
+					if (VERBOSE) console.log("Not amending - not on main bookmark");
+				}
 			} else {
 				const currentParsed = parseVersion(currentVersion);
 				const previousParsed = parseVersion(previousVersion);
