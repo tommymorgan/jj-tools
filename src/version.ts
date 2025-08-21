@@ -3,7 +3,7 @@
  */
 
 // This constant is replaced by scripts/build.ts during compilation
-const VERSION = "0.1.15";
+const VERSION = "0.1.19";
 
 export function getVersion(): string {
 	return VERSION;

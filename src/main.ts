@@ -30,7 +30,7 @@ import {
 	type PRChainInfo,
 } from "./pr_description.ts";
 import {
-	buildPRChain,
+	buildPRChainWithAutoCreate,
 	createPR,
 	type ExistingPR,
 	findExistingPRs,
@@ -193,9 +193,95 @@ function validateStackBookmarks(stack: StackInfo, options: CLIOptions): void {
 	Deno.exit(1);
 }
 
+async function resolveBookmarkConflict(
+	executor: CommandExecutor,
+	bookmark: string,
+	targetCommitId: string | undefined,
+): Promise<void> {
+	// Use the provided commit ID from the stack, or find the local one
+	let commitId = targetCommitId;
+
+	if (!commitId) {
+		// Fallback: Get the local commit ID for this bookmark (excluding @origin versions)
+		const logResult = await executor.exec([
+			"jj",
+			"log",
+			"-r",
+			`bookmarks(exact:${bookmark}) ~ bookmarks(exact:${bookmark}@origin)`,
+			"--no-graph",
+			"-T",
+			"commit_id",
+			"--limit",
+			"1",
+		]);
+
+		if (logResult.code !== 0 || !logResult.stdout.trim()) {
+			return;
+		}
+		commitId = logResult.stdout.trim().split("\n")[0];
+	}
+
+	const setResult = await executor.exec([
+		"jj",
+		"bookmark",
+		"set",
+		bookmark,
+		"-r",
+		commitId,
+	]);
+	if (setResult.code === 0) {
+		verbose(
+			`  Resolved conflict for ${bookmark} to ${commitId.substring(0, 8)}`,
+		);
+	}
+}
+
+async function trackSingleBookmark(
+	executor: CommandExecutor,
+	bookmark: string,
+	commitId: string | undefined,
+): Promise<void> {
+	const trackResult = await executor.exec([
+		"jj",
+		"bookmark",
+		"track",
+		`${bookmark}@origin`,
+	]);
+
+	if (trackResult.code !== 0) {
+		return; // Bookmark might not exist on remote yet or already be tracked
+	}
+
+	verbose(`  Tracked ${bookmark}@origin`);
+
+	// Check if tracking created a conflict (happens when local and remote diverged)
+	const listResult = await executor.exec([
+		"jj",
+		"bookmark",
+		"list",
+		"--all",
+		"-r",
+		bookmark,
+	]);
+
+	if (listResult.stdout.includes("(conflicted)")) {
+		await resolveBookmarkConflict(executor, bookmark, commitId);
+	}
+}
+
+async function trackBookmarks(
+	executor: CommandExecutor,
+	bookmarks: Array<{ name: string; commitHash?: string }>,
+): Promise<void> {
+	for (const bookmark of bookmarks) {
+		await trackSingleBookmark(executor, bookmark.name, bookmark.commitHash);
+	}
+}
+
 async function pushBookmarksToGitHub(
 	options: CLIOptions,
 	executor: CommandExecutor,
+	stack: StackInfo,
 ): Promise<void> {
 	output("Pushing to GitHub...");
 
@@ -203,6 +289,9 @@ async function pushBookmarksToGitHub(
 		verbose("  (dry-run: would push all bookmarks)");
 		return;
 	}
+
+	// Track all bookmarks in the stack to handle rebases properly
+	await trackBookmarks(executor, stack.bookmarks);
 
 	const pushResult = await executor.exec(["jj", "git", "push", "--all"]);
 	if (pushResult.code !== 0) {
@@ -412,7 +501,7 @@ async function processStack(ctx: AppContext): Promise<void> {
 	await handleUnbookmarkedChanges(ctx.options, ctx.executor);
 	const stack = await detectAndValidateStack(ctx);
 	await checkForConflicts(ctx);
-	await pushBookmarksToGitHub(ctx.options, ctx.executor);
+	await pushBookmarksToGitHub(ctx.options, ctx.executor, stack);
 	await processPRs(ctx, stack);
 }
 
@@ -470,7 +559,7 @@ async function detectAndValidateStack(ctx: AppContext): Promise<StackInfo> {
 
 	const stack = await detectStack(ctx.executor, ctx.options.baseBranch);
 	validateStackBookmarks(stack, ctx.options);
-	output(`Detecting stack: ${stack.bookmarks.length} bookmarks`);
+	output(`Local stack: ${stack.bookmarks.length} bookmarks`);
 	return stack;
 }
 
@@ -637,14 +726,39 @@ async function checkForConflicts(ctx: AppContext): Promise<void> {
 	Deno.exit(1);
 }
 
+function reportCreatedBookmarks(
+	createdBookmarks: string[],
+	existingPRs: Map<string, ExistingPR>,
+	stackSize: number,
+): void {
+	if (createdBookmarks.length === 0) return;
+
+	output(
+		`Created ${createdBookmarks.length} local bookmark(s) for dependent PRs:`,
+	);
+	for (const bookmark of createdBookmarks) {
+		const pr = existingPRs.get(bookmark);
+		if (pr) {
+			verbose(`  • ${bookmark} → ${pr.baseRefName} (PR #${pr.number})`);
+		}
+	}
+	output(`Local stack now: ${stackSize + createdBookmarks.length} bookmarks`);
+}
+
 async function processPRs(ctx: AppContext, stack: StackInfo): Promise<void> {
 	verbose("Building PR chain...");
 	const existingPRs = await findExistingPRs(ctx.executor);
-	const prChain = buildPRChain(
+
+	// Build PR chain and auto-create missing bookmarks for dependent PRs
+	const { chain: prChain, createdBookmarks } = await buildPRChainWithAutoCreate(
 		stack.bookmarks,
 		existingPRs,
 		ctx.options.baseBranch,
+		ctx.executor,
 	);
+
+	// Report on any bookmarks that were auto-created
+	reportCreatedBookmarks(createdBookmarks, existingPRs, stack.bookmarks.length);
 
 	const createdPRs = await createOrUpdatePRs(ctx, prChain, existingPRs);
 	await finalizePRs(ctx, createdPRs, existingPRs);

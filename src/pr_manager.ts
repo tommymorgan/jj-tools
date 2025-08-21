@@ -186,6 +186,87 @@ export function buildPRChain(
 	return chain;
 }
 
+async function createMissingBookmarks(
+	missingBookmarks: string[],
+	executor: CommandExecutor,
+): Promise<string[]> {
+	const createdBookmarks: string[] = [];
+	for (const bookmarkName of missingBookmarks) {
+		// Try to create the bookmark tracking the remote
+		const createResult = await executor.exec([
+			"jj",
+			"bookmark",
+			"create",
+			bookmarkName,
+			"-r",
+			`${bookmarkName}@origin`,
+		]);
+
+		if (createResult.code === 0) {
+			createdBookmarks.push(bookmarkName);
+		}
+	}
+	return createdBookmarks;
+}
+
+function buildChainFromCompleteList(
+	completeChain: string[],
+	bookmarks: Bookmark[],
+	existingPRs: Map<string, ExistingPR>,
+	baseBranch: string,
+): PRInfo[] {
+	const chain: PRInfo[] = [];
+	for (let i = 0; i < completeChain.length; i++) {
+		const bookmarkName = completeChain[i];
+		const isBottom = i === 0;
+		const base = isBottom ? baseBranch : completeChain[i - 1];
+
+		// Find the bookmark info if available
+		const bookmark = bookmarks.find((b) => b.name === bookmarkName);
+
+		chain.push({
+			bookmark: bookmarkName,
+			base,
+			title: bookmark?.commitMessage || `Changes from ${bookmarkName}`,
+			isBottom,
+			existingPR: existingPRs.get(bookmarkName),
+		});
+	}
+	return chain;
+}
+
+export async function buildPRChainWithAutoCreate(
+	bookmarks: Bookmark[],
+	existingPRs: Map<string, ExistingPR>,
+	baseBranch: string,
+	executor: CommandExecutor,
+): Promise<{ chain: PRInfo[]; createdBookmarks: string[] }> {
+	// First, build the complete chain including dependent PRs
+	const completeChain = buildCompleteChain(bookmarks, existingPRs, baseBranch);
+
+	// Find which bookmarks are missing locally
+	const localBookmarkNames = new Set(bookmarks.map((b) => b.name));
+	const missingBookmarks = completeChain.filter(
+		(name) => !localBookmarkNames.has(name),
+	);
+
+	// Create missing bookmarks
+	const createdBookmarks = await createMissingBookmarks(
+		missingBookmarks,
+		executor,
+	);
+
+	// Build the PR chain
+	const chain = buildChainFromCompleteList(
+		completeChain,
+		bookmarks,
+		existingPRs,
+		baseBranch,
+	);
+
+	return { chain, createdBookmarks };
+}
+
 function buildCompleteChain(
 	bookmarks: Bookmark[],
 	existingPRs: Map<string, ExistingPR>,
