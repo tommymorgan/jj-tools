@@ -1,6 +1,6 @@
 #!/usr/bin/env -S deno run --allow-read --allow-write --allow-run --allow-env
 
-import { parse as parseVersion } from "@std/semver";
+import { parse as parseVersion, compare } from "@std/semver";
 
 // Check for verbose flag
 const VERBOSE = Deno.args.includes("--verbose") || Deno.args.includes("-v");
@@ -36,12 +36,12 @@ async function getPreviousMainVersion(): Promise<string | null> {
 	// First try to get version from main@origin
 	if (VERBOSE) console.log("Checking previous main version...");
 	
-	let result = await exec(["jj", "cat", "-r", "main@origin", "deno.json"]);
+	let result = await exec(["jj", "file", "show", "-r", "main@origin", "deno.json"]);
 	
 	if (result.code !== 0) {
 		// If main@origin doesn't exist, try the parent commit
 		if (VERBOSE) console.log("  No main@origin found, checking parent commit...");
-		result = await exec(["jj", "cat", "-r", "@-", "deno.json"]);
+		result = await exec(["jj", "file", "show", "-r", "@-", "deno.json"]);
 		
 		if (result.code !== 0) {
 			// This might be the first commit
@@ -80,7 +80,7 @@ async function hasUncommittedChanges(): Promise<boolean> {
 
 async function amendCommit(): Promise<void> {
 	if (VERBOSE) console.log("Amending commit with version bump...");
-	const result = await exec(["jj", "amend"]);
+	const result = await exec(["jj", "squash"]);
 	if (result.code !== 0) {
 		throw new Error(`Failed to amend commit: ${result.stderr}`);
 	}
@@ -156,7 +156,7 @@ async function main() {
 				const currentParsed = parseVersion(currentVersion);
 				const previousParsed = parseVersion(previousVersion);
 				
-				if (currentParsed.compare(previousParsed) > 0) {
+				if (compare(currentParsed, previousParsed) > 0) {
 					console.log("✅ Version already bumped");
 				} else {
 					throw new Error(
