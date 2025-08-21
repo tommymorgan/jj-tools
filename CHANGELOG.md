@@ -1,7 +1,6 @@
 # Changelog
 
 ## [Unreleased]
-<!-- Test edit for push verification -->
 
 ### Fixed
 - **Critical: Prevent duplicate/broken PR stacks** - Fixed a bug where updating a PR in the middle or bottom of a stack would break the chain and create duplicate stacks. The tool now correctly detects the complete PR chain even when only part of the stack is in the local working directory. This ensures that PRs maintain their chain relationships and are never duplicated across multiple stacks.
