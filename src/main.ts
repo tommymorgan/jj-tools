@@ -654,7 +654,7 @@ async function checkForConflicts(ctx: AppContext): Promise<void> {
 
 async function processPRs(ctx: AppContext, stack: StackInfo): Promise<void> {
 	verbose("Building PR chain...");
-	const existingPRs = await findExistingPRs(ctx.executor, stack.bookmarks);
+	const existingPRs = await findExistingPRs(ctx.executor);
 	const prChain = buildPRChain(
 		stack.bookmarks,
 		existingPRs,

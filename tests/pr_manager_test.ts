@@ -14,7 +14,7 @@ import type { Bookmark } from "../src/stack_detection.ts";
 
 describe("Pull Request Manager", () => {
 	describe("findExistingPRs", () => {
-		it("should find existing PRs for bookmarks", async () => {
+		it("should find all existing PRs", async () => {
 			// Arrange
 			const mockExecutor = {
 				exec: async (cmd: string[]) => {
@@ -33,6 +33,12 @@ describe("Pull Request Manager", () => {
 									baseRefName: "feature-1",
 									isDraft: true,
 								},
+								{
+									number: 103,
+									headRefName: "unrelated-pr",
+									baseRefName: "master",
+									isDraft: false,
+								},
 							]),
 							stderr: "",
 							code: 0,
@@ -42,23 +48,16 @@ describe("Pull Request Manager", () => {
 				},
 			};
 
-			// Using functional API
-			const bookmarks: Bookmark[] = [
-				{ name: "feature-1" },
-				{ name: "feature-2" },
-				{ name: "feature-3" },
-			];
+			// Act - no bookmarks parameter needed anymore
+			const existingPRs = await findExistingPRs(mockExecutor);
 
-			// Act
-			const existingPRs = await findExistingPRs(mockExecutor, bookmarks);
-
-			// Assert
-			assertEquals(existingPRs.size, 2);
+			// Assert - now returns ALL PRs, not just those matching bookmarks
+			assertEquals(existingPRs.size, 3);
 			assertEquals(existingPRs.get("feature-1")?.number, 101);
 			assertEquals(existingPRs.get("feature-1")?.isDraft, false);
 			assertEquals(existingPRs.get("feature-2")?.number, 102);
 			assertEquals(existingPRs.get("feature-2")?.isDraft, true);
-			assertEquals(existingPRs.has("feature-3"), false);
+			assertEquals(existingPRs.get("unrelated-pr")?.number, 103);
 		});
 
 		it("should handle empty PR list", async () => {
@@ -72,11 +71,8 @@ describe("Pull Request Manager", () => {
 				},
 			};
 
-			// Using functional API
-			const bookmarks: Bookmark[] = [{ name: "feature-1" }];
-
-			// Act
-			const existingPRs = await findExistingPRs(mockExecutor, bookmarks);
+			// Act - no bookmarks parameter needed anymore
+			const existingPRs = await findExistingPRs(mockExecutor);
 
 			// Assert
 			assertEquals(existingPRs.size, 0);

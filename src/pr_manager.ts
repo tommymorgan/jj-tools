@@ -32,9 +32,8 @@ export interface UpdatePROptions {
 
 export async function findExistingPRs(
 	executor: CommandExecutor,
-	bookmarks: Bookmark[],
 ): Promise<Map<string, ExistingPR>> {
-	// Query GitHub for existing PRs
+	// Query GitHub for ALL existing PRs by the user
 	const result = await executor.exec([
 		"gh",
 		"pr",
@@ -54,12 +53,11 @@ export async function findExistingPRs(
 	const prs: ExistingPR[] = JSON.parse(result.stdout || "[]");
 	const prMap = new Map<string, ExistingPR>();
 
-	// Match PRs to bookmarks
+	// Include ALL PRs, not just those matching local bookmarks
+	// This is needed to detect full PR chains even when only part
+	// of the chain is in the local working directory
 	for (const pr of prs) {
-		const bookmark = bookmarks.find((b) => b.name === pr.headRefName);
-		if (bookmark) {
-			prMap.set(bookmark.name, pr);
-		}
+		prMap.set(pr.headRefName, pr);
 	}
 
 	return prMap;
@@ -164,21 +162,130 @@ export function buildPRChain(
 	existingPRs: Map<string, ExistingPR>,
 	baseBranch: string,
 ): PRInfo[] {
-	const chain: PRInfo[] = [];
+	// First, build the complete chain including dependent PRs
+	const completeChain = buildCompleteChain(bookmarks, existingPRs, baseBranch);
 
-	for (let i = 0; i < bookmarks.length; i++) {
-		const bookmark = bookmarks[i];
+	const chain: PRInfo[] = [];
+	for (let i = 0; i < completeChain.length; i++) {
+		const bookmarkName = completeChain[i];
 		const isBottom = i === 0;
-		const base = isBottom ? baseBranch : bookmarks[i - 1].name;
+		const base = isBottom ? baseBranch : completeChain[i - 1];
+
+		// Find the bookmark info if available
+		const bookmark = bookmarks.find((b) => b.name === bookmarkName);
 
 		chain.push({
-			bookmark: bookmark.name,
+			bookmark: bookmarkName,
 			base,
-			title: bookmark.commitMessage || `Changes from ${bookmark.name}`,
+			title: bookmark?.commitMessage || `Changes from ${bookmarkName}`,
 			isBottom,
-			existingPR: existingPRs.get(bookmark.name),
+			existingPR: existingPRs.get(bookmarkName),
 		});
 	}
 
 	return chain;
+}
+
+function buildCompleteChain(
+	bookmarks: Bookmark[],
+	existingPRs: Map<string, ExistingPR>,
+	baseBranch: string,
+): string[] {
+	// Start with bookmarks in the local stack
+	const bookmarkNames = bookmarks.map((b) => b.name);
+	const completeChain = new Set<string>(bookmarkNames);
+
+	// Also need to include dependencies (things our bookmarks depend on)
+	addDependencyPRs(completeChain, existingPRs, baseBranch);
+
+	// Find all PRs that depend on any bookmark in our chain
+	addDependentPRs(completeChain, existingPRs);
+
+	// Sort the chain by dependencies (topological sort)
+	return sortChainByDependencies(
+		Array.from(completeChain),
+		existingPRs,
+		baseBranch,
+	);
+}
+
+function addDependentPRs(
+	chain: Set<string>,
+	existingPRs: Map<string, ExistingPR>,
+): void {
+	let foundNew = true;
+	while (foundNew) {
+		foundNew = addOneDependentPR(chain, existingPRs);
+	}
+}
+
+function addOneDependentPR(
+	chain: Set<string>,
+	existingPRs: Map<string, ExistingPR>,
+): boolean {
+	for (const [prName, pr] of existingPRs) {
+		if (chain.has(pr.baseRefName) && !chain.has(prName)) {
+			chain.add(prName);
+			return true;
+		}
+	}
+	return false;
+}
+
+function addDependencyPRs(
+	chain: Set<string>,
+	existingPRs: Map<string, ExistingPR>,
+	baseBranch: string,
+): void {
+	let foundNew = true;
+	while (foundNew) {
+		foundNew = addOneDependencyPR(chain, existingPRs, baseBranch);
+	}
+}
+
+function addOneDependencyPR(
+	chain: Set<string>,
+	existingPRs: Map<string, ExistingPR>,
+	baseBranch: string,
+): boolean {
+	for (const bookmarkName of chain) {
+		const pr = existingPRs.get(bookmarkName);
+		if (pr && pr.baseRefName !== baseBranch && !chain.has(pr.baseRefName)) {
+			chain.add(pr.baseRefName);
+			return true;
+		}
+	}
+	return false;
+}
+
+function sortChainByDependencies(
+	bookmarkNames: string[],
+	existingPRs: Map<string, ExistingPR>,
+	baseBranch: string,
+): string[] {
+	const sorted: string[] = [];
+	const visited = new Set<string>();
+
+	function visit(name: string): void {
+		if (visited.has(name)) return;
+		visited.add(name);
+
+		// Visit dependencies first
+		const pr = existingPRs.get(name);
+		if (
+			pr &&
+			pr.baseRefName !== baseBranch &&
+			bookmarkNames.includes(pr.baseRefName)
+		) {
+			visit(pr.baseRefName);
+		}
+
+		sorted.push(name);
+	}
+
+	for (const name of bookmarkNames) {
+		visit(name);
+	}
+
+	return sorted;
 }
