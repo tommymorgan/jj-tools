@@ -202,28 +202,29 @@ describe("Stack Detection", () => {
 			);
 		});
 
-		it("should filter out remote-only bookmarks (BUG-005 fix)", async () => {
-			// Arrange - simulating bookmarks that were deleted locally but still exist on remote
+		it("should include commits with @origin bookmarks as candidates for local bookmark creation", async () => {
+			// Arrange - simulating bookmarks that exist on remote but not locally
 			const logOutput = `feature-3\nauto/jjsp-feature-2-abc123@origin\nfeature-1`;
 			const mockExecutor = createMockExecutor(logOutput);
 
 			// Act
 			const stack = await detectStack(mockExecutor);
 
-			// Assert - should only include local bookmarks, not @origin ones
-			assertEquals(stack.bookmarks.length, 2);
+			// Assert - should include the commit so a local bookmark can be created
+			assertEquals(stack.bookmarks.length, 3);
 			assertEquals(stack.bookmarks[0].name, "feature-1");
-			assertEquals(stack.bookmarks[1].name, "feature-3");
-			// The @origin bookmark should be filtered out
+			assertEquals(stack.bookmarks[1].name, "auto/jjsp-feature-2-abc123");
+			assertEquals(stack.bookmarks[2].name, "feature-3");
+			// The @origin suffix should be stripped but the bookmark included
 			const bookmarkNames = stack.bookmarks.map((b) => b.name);
 			assertEquals(
 				bookmarkNames.includes("auto/jjsp-feature-2-abc123@origin"),
 				false,
 			);
-			assertEquals(bookmarkNames.includes("auto/jjsp-feature-2-abc123"), false);
+			assertEquals(bookmarkNames.includes("auto/jjsp-feature-2-abc123"), true);
 		});
 
-		it("should filter out all remote tracking bookmarks", async () => {
+		it("should include @origin bookmarks but filter out other remote tracking bookmarks", async () => {
 			// Arrange - multiple remote tracking bookmarks
 			const logOutput = `local-feature\nremote-1@origin\nremote-2@upstream\nlocal-fix`;
 			const mockExecutor = createMockExecutor(logOutput);
@@ -231,11 +232,12 @@ describe("Stack Detection", () => {
 			// Act
 			const stack = await detectStack(mockExecutor);
 
-			// Assert - should only include local bookmarks
-			assertEquals(stack.bookmarks.length, 2);
+			// Assert - should include @origin (for local bookmark creation) but not @upstream
+			assertEquals(stack.bookmarks.length, 3);
 			assertEquals(stack.bookmarks[0].name, "local-fix");
-			assertEquals(stack.bookmarks[1].name, "local-feature");
-			// No remote tracking bookmarks should be included
+			assertEquals(stack.bookmarks[1].name, "remote-1");
+			assertEquals(stack.bookmarks[2].name, "local-feature");
+			// @origin should be stripped, @upstream should be filtered out entirely
 			const bookmarkNames = stack.bookmarks.map((b) => b.name);
 			assertEquals(
 				bookmarkNames.some((n) => n.includes("@")),

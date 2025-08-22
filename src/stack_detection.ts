@@ -58,12 +58,18 @@ function parseBookmarkLine(line: string): string[] {
 }
 
 function createBookmark(name: string): Bookmark | null {
-	// Filter out remote-only bookmarks (e.g., bookmark@origin)
-	if (name.includes("@")) {
+	// Handle remote tracking bookmarks (e.g., bookmark@origin)
+	// We want to include these so local bookmarks can be created for them
+	let cleanName = name.replace("*", "");
+
+	// If this is a remote tracking bookmark, extract the local name
+	if (cleanName.includes("@origin")) {
+		cleanName = cleanName.replace("@origin", "");
+	} else if (cleanName.includes("@")) {
+		// Filter out other remote bookmarks (e.g., @upstream)
 		return null;
 	}
 
-	const cleanName = name.replace("*", "");
 	const isCurrent = name.includes("*");
 
 	return {

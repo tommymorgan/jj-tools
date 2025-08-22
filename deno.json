@@ -1,5 +1,5 @@
 {
-	"version": "0.1.21",
+	"version": "0.1.22",
 	"tasks": {
 		"test": "deno test --allow-run --allow-read --allow-write --allow-env",
 		"test:watch": "deno test --allow-run --allow-read --allow-write --allow-env --watch",
@@ -15,7 +15,9 @@
 		"check:version": "deno run --allow-read --allow-run --allow-env scripts/check-version-bump.ts",
 		"verify": "deno task typecheck && deno task check && deno task test",
 		"ci": "deno task format:check && deno task verify",
-		"push": "deno task verify && deno run --allow-read --allow-write --allow-run --allow-env scripts/push.ts"
+		"push": "deno task verify && deno run --allow-read --allow-write --allow-run --allow-env scripts/push.ts",
+		"update-biome-vscode": ".vscode/update-biome.sh",
+		"biome": "npx @biomejs/biome@latest"
 	},
 	"imports": {
 		"@std/testing": "https://deno.land/std@0.210.0/testing/mod.ts",
