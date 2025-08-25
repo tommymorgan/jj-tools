@@ -1,4 +1,7 @@
+import { faker } from "npm:@faker-js/faker@9";
 import { z } from "npm:zod@4";
+import type { CLIOptions } from "../src/cli.ts";
+import type { Bookmark, StackInfo } from "../src/stack_detection.ts";
 
 // Schema for jj log output line format: "changeId bookmarks description"
 export const JJLogLineSchema = z.object({
@@ -135,16 +138,12 @@ export function generateRemoteBookmarkStack(
 	}));
 }
 
-/**
- * Generate a realistic change ID (32 chars of lowercase letters)
- */
 export function generateChangeId(): string {
-	const chars = "klmnopqrstuvwxyz";
-	let id = "";
-	for (let i = 0; i < 32; i++) {
-		id += chars[Math.floor(Math.random() * chars.length)];
-	}
-	return id;
+	return faker.string.alpha({
+		length: 32,
+		casing: "lower",
+		exclude: ["a", "b", "c", "d", "e", "f", "g", "h", "i", "j"],
+	});
 }
 
 /**
@@ -302,6 +301,127 @@ export function createMockExecutor(scenarios: {
 	return {
 		exec: handleCommand,
 	};
+}
+
+/**
+ * Generate CLIOptions for testing with dynamic values
+ */
+export function generateCLIOptions(options?: {
+	overrides?: Partial<CLIOptions>;
+}): CLIOptions {
+	const defaults: CLIOptions = {
+		baseBranch: faker.helpers.maybe(() =>
+			faker.helpers.arrayElement([
+				"main",
+				"master",
+				"trunk",
+				"develop",
+				"production",
+			]),
+		),
+		noAutoBookmark: faker.datatype.boolean(),
+		keepAuto: false,
+		cleanupAllAuto: false,
+		dryRun: faker.datatype.boolean({ probability: 0.2 }),
+		verbose: faker.datatype.boolean({ probability: 0.3 }),
+		version: false,
+		help: false,
+	};
+
+	return { ...defaults, ...options?.overrides };
+}
+
+/**
+ * Generate a Bookmark with dynamic test data
+ */
+export function generateBookmark(options?: {
+	overrides?: Partial<Bookmark>;
+}): Bookmark {
+	const commitTypes = ["feat", "fix", "chore", "docs", "test", "refactor"];
+	const branchPrefixes = [
+		"feat/",
+		"fix/",
+		"chore/",
+		"docs/",
+		"test/",
+		"auto/jjsp-",
+	];
+
+	const defaults: Bookmark = {
+		name:
+			faker.helpers.arrayElement(branchPrefixes) +
+			faker.git
+				.branch()
+				.replace(/[^a-z0-9-]/gi, "-")
+				.toLowerCase(),
+		commitHash: faker.git.commitSha().substring(0, 8),
+		commitMessage: `${faker.helpers.arrayElement(commitTypes)}: ${faker.hacker.phrase().toLowerCase()}`,
+		isCurrent: faker.datatype.boolean({ probability: 0.1 }),
+	};
+
+	return { ...defaults, ...options?.overrides };
+}
+
+// Helper to add base branch if needed
+function addBaseBranchIfNeeded(
+	bookmarks: Bookmark[],
+	options?: {
+		includeBaseBranch?: boolean;
+		baseBranchName?: string;
+	},
+): void {
+	const shouldInclude =
+		options?.includeBaseBranch ?? faker.datatype.boolean({ probability: 0.3 });
+
+	if (!shouldInclude) return;
+
+	const baseName =
+		options?.baseBranchName ??
+		faker.helpers.arrayElement(["main", "master", "trunk"]);
+	bookmarks.push(
+		generateBookmark({
+			overrides: {
+				name: baseName,
+				commitMessage: `chore: ${faker.lorem.words(3)}`,
+				isCurrent: false,
+			},
+		}),
+	);
+}
+
+/**
+ * Generate a StackInfo with dynamic test data
+ */
+export function generateStackInfo(options?: {
+	bookmarkCount?: number;
+	includeBaseBranch?: boolean;
+	baseBranchName?: string;
+	overrides?: Partial<StackInfo>;
+}): StackInfo {
+	const bookmarkCount =
+		options?.bookmarkCount ?? faker.number.int({ min: 1, max: 6 });
+	const bookmarks: Bookmark[] = [];
+
+	// Generate feature bookmarks
+	for (let i = 0; i < bookmarkCount; i++) {
+		bookmarks.push(generateBookmark());
+	}
+
+	// Optionally include base branch
+	addBaseBranchIfNeeded(bookmarks, options);
+
+	// Set one random bookmark as current
+	const currentIndex = faker.number.int({ min: 0, max: bookmarks.length - 1 });
+	if (bookmarks.length > 0) {
+		bookmarks[currentIndex].isCurrent = true;
+	}
+
+	const defaults: StackInfo = {
+		bookmarks,
+		currentPosition: currentIndex,
+	};
+
+	return { ...defaults, ...options?.overrides };
 }
 
 /**

@@ -1,118 +1,315 @@
 import { assertEquals } from "https://deno.land/std@0.208.0/assert/mod.ts";
 import { describe, it } from "https://deno.land/std@0.208.0/testing/bdd.ts";
+import { pushBookmarksToGitHub } from "../src/main.ts";
 import type { CommandExecutor } from "../src/stack_detection.ts";
+import {
+	generateBookmark,
+	generateCLIOptions,
+	generateStackInfo,
+} from "./test_data_generators.ts";
 
 type CommandResponse = { stdout: string; stderr: string; code: number };
 
-// Helper to create success response
-function successResponse(message = "Pushed successfully"): CommandResponse {
-	return { stdout: message, stderr: "", code: 0 };
-}
-
-// Helper to create error response
-function errorResponse(message: string): CommandResponse {
-	return { stdout: "", stderr: message, code: 1 };
-}
-
-// Check if command is push
-function isPushCommand(cmd: string[]): boolean {
-	return (
-		cmd.length >= 3 && cmd[0] === "jj" && cmd[1] === "git" && cmd[2] === "push"
-	);
-}
-
-// Handle push command with base branch check
-function handlePushWithBaseBranchCheck(cmd: string[]): CommandResponse {
-	const hasBaseBranch = cmd.includes("master") || cmd.includes("main");
-	return hasBaseBranch
-		? errorResponse("Error: refs/heads/master (reason: stale info)")
-		: successResponse();
-}
-
-describe("pushBookmarksToGitHub", () => {
-	it("should exclude base branch from push command to prevent stale reference errors", async () => {
-		const pushedCommands: string[] = [];
+describe("pushBookmarksToGitHub function", () => {
+	it("should exclude base branch when pushing bookmarks", async () => {
+		const executedCommands: string[][] = [];
+		const baseBranch = "trunk"; // Non-standard base branch name
 
 		const executor: CommandExecutor = {
+			// biome-ignore lint/complexity/noExcessiveCognitiveComplexity: Mock executors need complex logic
 			exec: (cmd: string[]): Promise<CommandResponse> => {
-				pushedCommands.push(cmd.join(" "));
-
-				// Delegate to handler based on command type
-				if (isPushCommand(cmd)) {
-					return Promise.resolve(handlePushWithBaseBranchCheck(cmd));
+				executedCommands.push(cmd);
+				// track bookmark commands succeed
+				if (cmd[0] === "jj" && cmd[1] === "bookmark") {
+					return Promise.resolve({ stdout: "", stderr: "", code: 0 });
 				}
-				return Promise.resolve(successResponse());
+				// push command succeeds
+				if (cmd[0] === "jj" && cmd[1] === "git" && cmd[2] === "push") {
+					return Promise.resolve({
+						stdout: "Pushed successfully",
+						stderr: "",
+						code: 0,
+					});
+				}
+				return Promise.resolve({
+					stdout: "",
+					stderr: "Unknown command",
+					code: 1,
+				});
 			},
 		};
 
-		const pushResult = await executor.exec([
-			"jj",
-			"git",
-			"push",
-			"-b",
-			"feat/feature-1",
-			"-b",
-			"fix/bugfix-1",
-			"-b",
-			"auto/jjsp-test-123456",
-		]);
+		const options = generateCLIOptions({
+			overrides: {
+				baseBranch,
+				dryRun: false,
+			},
+		});
 
-		assertEquals(pushResult.code, 0);
-		assertEquals(pushResult.stdout, "Pushed successfully");
+		const stack = generateStackInfo({
+			bookmarkCount: 2,
+			includeBaseBranch: true,
+			baseBranchName: baseBranch,
+		});
 
-		// Verify master was not included
-		const pushCommand = pushedCommands.find((cmd) => cmd.includes("git push"));
+		await pushBookmarksToGitHub(options, executor, stack);
+
+		// Find the push command
+		const pushCommand = executedCommands.find(
+			(cmd) => cmd[0] === "jj" && cmd[1] === "git" && cmd[2] === "push",
+		);
+
+		// Verify push command was executed
+		assertEquals(pushCommand !== undefined, true);
+
+		// Verify base branch (trunk) was NOT included in push
+		assertEquals(pushCommand?.includes(baseBranch), false);
+
+		// Verify other bookmarks WERE included (at least the feature bookmarks)
+		const nonBaseBookmarks = stack.bookmarks.filter(
+			(b) => b.name !== baseBranch,
+		);
+		for (const bookmark of nonBaseBookmarks) {
+			assertEquals(pushCommand?.includes(bookmark.name), true);
+		}
+
+		// Verify correct -b flag usage
+		const bFlagCount = pushCommand?.filter((item) => item === "-b").length ?? 0;
+		assertEquals(bFlagCount, nonBaseBookmarks.length);
+	});
+
+	it("should handle different base branch names dynamically", async () => {
+		const executedCommands: string[][] = [];
+
+		// Generate a random base branch name
+		const baseBranches = [
+			"main",
+			"master",
+			"trunk",
+			"develop",
+			"production",
+			"release",
+		];
+		const baseBranch =
+			baseBranches[Math.floor(Math.random() * baseBranches.length)];
+
+		const executor: CommandExecutor = {
+			exec: (cmd: string[]): Promise<CommandResponse> => {
+				executedCommands.push(cmd);
+				return Promise.resolve({ stdout: "", stderr: "", code: 0 });
+			},
+		};
+
+		const options = generateCLIOptions({
+			overrides: {
+				baseBranch,
+				dryRun: false,
+			},
+		});
+
+		const stack = generateStackInfo({
+			bookmarkCount: 3,
+			includeBaseBranch: true,
+			baseBranchName: baseBranch,
+		});
+
+		await pushBookmarksToGitHub(options, executor, stack);
+
+		const pushCommand = executedCommands.find(
+			(cmd) => cmd[0] === "jj" && cmd[1] === "git" && cmd[2] === "push",
+		);
+
+		// Verify the dynamically chosen base branch was excluded
+		assertEquals(pushCommand?.includes(baseBranch), false);
+
+		// Verify all non-base bookmarks were included
+		const nonBaseBookmarks = stack.bookmarks.filter(
+			(b) => b.name !== baseBranch,
+		);
+		for (const bookmark of nonBaseBookmarks) {
+			assertEquals(pushCommand?.includes(bookmark.name), true);
+		}
+	});
+
+	it("should push all bookmarks when base branch is not in the stack", async () => {
+		const executedCommands: string[][] = [];
+
+		const executor: CommandExecutor = {
+			exec: (cmd: string[]): Promise<CommandResponse> => {
+				executedCommands.push(cmd);
+				return Promise.resolve({ stdout: "", stderr: "", code: 0 });
+			},
+		};
+
+		const options = generateCLIOptions({
+			overrides: {
+				baseBranch: "main",
+				dryRun: false,
+			},
+		});
+
+		// Generate stack without base branch
+		const stack = generateStackInfo({
+			bookmarkCount: 3,
+			includeBaseBranch: false,
+		});
+
+		await pushBookmarksToGitHub(options, executor, stack);
+
+		const pushCommand = executedCommands.find(
+			(cmd) => cmd[0] === "jj" && cmd[1] === "git" && cmd[2] === "push",
+		);
+
+		// All bookmarks should be included since base branch is not in stack
+		for (const bookmark of stack.bookmarks) {
+			assertEquals(pushCommand?.includes(bookmark.name), true);
+		}
+
+		// Should have -b flags for all bookmarks
+		const bFlagCount = pushCommand?.filter((item) => item === "-b").length ?? 0;
+		assertEquals(bFlagCount, stack.bookmarks.length);
+	});
+
+	it("should respect dry-run mode and not execute push", async () => {
+		const executedCommands: string[][] = [];
+
+		const executor: CommandExecutor = {
+			exec: (cmd: string[]): Promise<CommandResponse> => {
+				executedCommands.push(cmd);
+				return Promise.resolve({ stdout: "", stderr: "", code: 0 });
+			},
+		};
+
+		const options = generateCLIOptions({
+			overrides: {
+				dryRun: true,
+			},
+		});
+
+		const stack = generateStackInfo({
+			bookmarkCount: 2,
+		});
+
+		await pushBookmarksToGitHub(options, executor, stack);
+
+		// No push command should be executed in dry-run mode
+		const pushCommand = executedCommands.find(
+			(cmd) => cmd[0] === "jj" && cmd[1] === "git" && cmd[2] === "push",
+		);
+
+		assertEquals(pushCommand, undefined);
+	});
+
+	it("should track all bookmarks before pushing", async () => {
+		const executedCommands: string[][] = [];
+
+		const executor: CommandExecutor = {
+			exec: (cmd: string[]): Promise<CommandResponse> => {
+				executedCommands.push(cmd);
+				return Promise.resolve({ stdout: "", stderr: "", code: 0 });
+			},
+		};
+
+		const options = generateCLIOptions({
+			overrides: {
+				dryRun: false,
+			},
+		});
+
+		// Create specific bookmarks to ensure predictable behavior
+		const stack = generateStackInfo({
+			overrides: {
+				bookmarks: [
+					generateBookmark({
+						overrides: { name: "feat/user-auth", commitHash: "abc123" },
+					}),
+					generateBookmark({
+						overrides: { name: "fix/bug-123", commitHash: "def456" },
+					}),
+				],
+				currentPosition: 0,
+			},
+		});
+
+		await pushBookmarksToGitHub(options, executor, stack);
+
+		// Verify tracking commands were executed before push
+		const trackCommands = executedCommands.filter(
+			(cmd) => cmd[0] === "jj" && cmd[1] === "bookmark" && cmd[2] === "track",
+		);
+
+		const pushCommandIndex = executedCommands.findIndex(
+			(cmd) => cmd[0] === "jj" && cmd[1] === "git" && cmd[2] === "push",
+		);
+
+		// Should have tracking commands for ALL bookmarks (even if not all are pushed)
+		assertEquals(trackCommands.length, stack.bookmarks.length);
+
+		// Verify tracking happened (track command uses bookmark@origin format)
+		for (let i = 0; i < stack.bookmarks.length; i++) {
+			const bookmark = stack.bookmarks[i];
+			const trackCmd = trackCommands[i];
+			assertEquals(trackCmd?.includes(`${bookmark.name}@origin`), true);
+		}
+
+		// All tracking should happen before push
+		const trackIndices = executedCommands.reduce((indices, cmd, index) => {
+			if (cmd[0] === "jj" && cmd[1] === "bookmark" && cmd[2] === "track") {
+				indices.push(index);
+			}
+			return indices;
+		}, [] as number[]);
+
+		assertEquals(
+			trackIndices.every((idx) => idx < pushCommandIndex),
+			true,
+		);
+	});
+
+	it("should handle stacks with auto-generated bookmarks", async () => {
+		const executedCommands: string[][] = [];
+
+		const executor: CommandExecutor = {
+			exec: (cmd: string[]): Promise<CommandResponse> => {
+				executedCommands.push(cmd);
+				return Promise.resolve({ stdout: "", stderr: "", code: 0 });
+			},
+		};
+
+		const options = generateCLIOptions({
+			overrides: {
+				baseBranch: "master",
+				dryRun: false,
+			},
+		});
+
+		// Create stack with mix of regular and auto bookmarks
+		const stack = generateStackInfo({
+			overrides: {
+				bookmarks: [
+					generateBookmark({ overrides: { name: "feat/user-auth" } }),
+					generateBookmark({
+						overrides: { name: "auto/jjsp-fix-login-abc123" },
+					}),
+					generateBookmark({
+						overrides: { name: "master", commitMessage: "chore: base" },
+					}),
+					generateBookmark({ overrides: { name: "fix/session-timeout" } }),
+				],
+				currentPosition: 1,
+			},
+		});
+
+		await pushBookmarksToGitHub(options, executor, stack);
+
+		const pushCommand = executedCommands.find(
+			(cmd) => cmd[0] === "jj" && cmd[1] === "git" && cmd[2] === "push",
+		);
+
+		// Should push auto bookmarks but not base branch
+		assertEquals(pushCommand?.includes("feat/user-auth"), true);
+		assertEquals(pushCommand?.includes("auto/jjsp-fix-login-abc123"), true);
+		assertEquals(pushCommand?.includes("fix/session-timeout"), true);
 		assertEquals(pushCommand?.includes("master"), false);
-		assertEquals(pushCommand?.includes("main"), false);
-	});
-
-	it("should successfully push by excluding base branch", async () => {
-		const executor: CommandExecutor = {
-			exec: (cmd: string[]): Promise<CommandResponse> => {
-				if (!isPushCommand(cmd)) {
-					return Promise.resolve(successResponse());
-				}
-				// Push fails if base branch is included
-				return Promise.resolve(handlePushWithBaseBranchCheck(cmd));
-			},
-		};
-
-		const pushResult = await executor.exec([
-			"jj",
-			"git",
-			"push",
-			"-b",
-			"feat/feature-1",
-			"-b",
-			"auto/jjsp-test-123456",
-		]);
-
-		assertEquals(pushResult.code, 0);
-		assertEquals(pushResult.stdout, "Pushed successfully");
-	});
-
-	it("should use -b flag for each bookmark in push command", async () => {
-		const pushedCommands: string[] = [];
-
-		const executor: CommandExecutor = {
-			exec: (cmd: string[]): Promise<CommandResponse> => {
-				pushedCommands.push(cmd.join(" "));
-				return Promise.resolve(successResponse());
-			},
-		};
-
-		await executor.exec([
-			"jj",
-			"git",
-			"push",
-			"-b",
-			"feat/feature-1",
-			"-b",
-			"fix/bugfix-1",
-		]);
-
-		const pushCommand = pushedCommands[0];
-		// Verify the command uses -b flags
-		assertEquals(pushCommand, "jj git push -b feat/feature-1 -b fix/bugfix-1");
 	});
 });

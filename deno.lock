@@ -1,10 +1,14 @@
 {
   "version": "5",
   "specifiers": {
+    "npm:@faker-js/faker@9": "9.9.0",
     "npm:zod@3": "3.25.76",
     "npm:zod@4": "4.0.17"
   },
   "npm": {
+    "@faker-js/faker@9.9.0": {
+      "integrity": "sha512-OEl393iCOoo/z8bMezRlJu+GlRGlsKbUAN7jKB6LhnKoqKve5DXRpalbItIIcwnCjs1k/FOPjFzcA6Qn+H+YbA=="
+    },
     "zod@3.25.76": {
       "integrity": "sha512-gzUt/qt81nXsFGKIFcC3YnfEAx5NkunCfnDlvuBSSFS02bcXu4Lmea0AFIUwbLWxWPx3d9p8S5QoaujKcNQxcQ=="
     },

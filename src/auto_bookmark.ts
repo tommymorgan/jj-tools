@@ -90,6 +90,40 @@ async function getChangeDescription(
 	return { changeId, description };
 }
 
+async function hasMergedPR(
+	executor: CommandExecutor,
+	changeId: string,
+): Promise<boolean> {
+	// Check if there's a merged PR for this commit
+	// We search by commit SHA which should be part of the PR body or title
+	const prResult = await executor.exec([
+		"gh",
+		"pr",
+		"list",
+		"--state",
+		"merged",
+		"--search",
+		changeId.substring(0, 8), // Use first 8 chars of change ID for search
+		"--json",
+		"number,state,headRefName",
+	]);
+
+	if (prResult.code !== 0) {
+		return false;
+	}
+
+	try {
+		const prs = JSON.parse(prResult.stdout);
+		// Check if any merged PR was for an auto-bookmark
+		return prs.some(
+			(pr: { state: string; headRefName?: string }) =>
+				pr.state === "MERGED" && pr.headRefName?.startsWith("auto/jjsp-"),
+		);
+	} catch {
+		return false;
+	}
+}
+
 async function processLogLine(
 	executor: CommandExecutor,
 	line: string,
@@ -101,6 +135,12 @@ async function processLogLine(
 	const parsed = parseLogLine(line);
 	if (!parsed || parsed.hasBookmarks) {
 		return null;
+	}
+
+	// Check if this commit previously had a merged PR with an auto-bookmark
+	const hadMergedPR = await hasMergedPR(executor, parsed.changeId);
+	if (hadMergedPR) {
+		return null; // Skip commits that already had merged PRs
 	}
 
 	return await getChangeDescription(executor, parsed.changeId);
@@ -254,18 +294,29 @@ async function shouldDeleteBookmark(
 	return prState === null || prState === "MERGED" || prState === "CLOSED";
 }
 
+async function processAutoBookmark(
+	executor: CommandExecutor,
+	bookmark: string,
+	dryRun: boolean,
+): Promise<boolean> {
+	const shouldDelete = await shouldDeleteBookmark(executor, bookmark);
+	if (shouldDelete && !dryRun) {
+		await deleteBookmark(executor, bookmark);
+	}
+	return shouldDelete;
+}
+
 export async function cleanupMergedAutoBookmarks(
 	executor: CommandExecutor,
 	autoBookmarks: string[],
+	dryRun = false,
 ): Promise<CleanupResult> {
 	const deleted: string[] = [];
 	const kept: string[] = [];
 
 	for (const bookmark of autoBookmarks) {
-		const shouldDelete = await shouldDeleteBookmark(executor, bookmark);
-
-		if (shouldDelete) {
-			await deleteBookmark(executor, bookmark);
+		const wasDeleted = await processAutoBookmark(executor, bookmark, dryRun);
+		if (wasDeleted) {
 			deleted.push(bookmark);
 		} else {
 			kept.push(bookmark);

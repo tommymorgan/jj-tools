@@ -109,7 +109,11 @@ async function cleanupAutoBookmarks(
 	if (options.cleanupAllAuto) {
 		await forceCleanupAllAutoBookmarks(autoBookmarks, options, executor);
 	} else if (autoBookmarks.length > 0) {
-		await cleanupMergedAutoBookmarksWrapper(autoBookmarks, executor);
+		await cleanupMergedAutoBookmarksWrapper(
+			autoBookmarks,
+			executor,
+			options.dryRun,
+		);
 	}
 }
 
@@ -129,13 +133,19 @@ async function forceCleanupAllAutoBookmarks(
 async function cleanupMergedAutoBookmarksWrapper(
 	autoBookmarks: string[],
 	executor: CommandExecutor,
+	dryRun = false,
 ): Promise<void> {
 	const cleanupResult = await cleanupMergedAutoBookmarks(
 		executor,
 		autoBookmarks,
+		dryRun,
 	);
 	for (const deleted of cleanupResult.deleted) {
-		verbose(`  ${deleted}: PR merged/closed, deleted`);
+		if (dryRun) {
+			verbose(`  ${deleted}: PR merged/closed, would delete`);
+		} else {
+			verbose(`  ${deleted}: PR merged/closed, deleted`);
+		}
 	}
 }
 
@@ -279,7 +289,30 @@ async function trackBookmarks(
 	}
 }
 
-async function pushBookmarksToGitHub(
+function filterBaseBranches(
+	bookmarks: Bookmark[],
+	baseBranch?: string,
+): Bookmark[] {
+	const commonBaseNames = [
+		"main",
+		"master",
+		"trunk",
+		"develop",
+		"production",
+		"release",
+	];
+
+	return bookmarks.filter((b) => {
+		// Filter out the configured base branch
+		if (baseBranch && b.name === baseBranch) {
+			return false;
+		}
+		// Also filter out common base branch names as a safety measure
+		return !commonBaseNames.includes(b.name);
+	});
+}
+
+export async function pushBookmarksToGitHub(
 	options: CLIOptions,
 	executor: CommandExecutor,
 	stack: StackInfo,
@@ -294,13 +327,19 @@ async function pushBookmarksToGitHub(
 	// Track all bookmarks in the stack to handle rebases properly
 	await trackBookmarks(executor, stack.bookmarks);
 
-	// Build the push command with specific bookmarks (excluding base branch)
+	// Filter out base branches to avoid stale reference errors
+	const bookmarksToPush = filterBaseBranches(
+		stack.bookmarks,
+		options.baseBranch,
+	);
+
+	// Build the push command with specific bookmarks (excluding base branches)
 	// Note: We can't use --deleted with -b flags, so deleted bookmarks won't be pushed to remote
 	const pushCmd = [
 		"jj",
 		"git",
 		"push",
-		...stack.bookmarks.flatMap((b) => ["-b", b.name]),
+		...bookmarksToPush.flatMap((b) => ["-b", b.name]),
 	];
 
 	const pushResult = await executor.exec(pushCmd);

@@ -104,11 +104,11 @@ function createFindUnbookmarkedMockExecutor(
 	showMap: Record<string, string>,
 ): CommandExecutor {
 	return {
-		exec: async (cmd: string[]) => {
-			return (
+		exec: (cmd: string[]) => {
+			return Promise.resolve(
 				handleLogCommand(cmd, logOutput) ||
-				handleShowCommand(cmd, showMap) ||
-				createMockResponse("", "Unknown command", 1)
+					handleShowCommand(cmd, showMap) ||
+					createMockResponse("", "Unknown command", 1),
 			);
 		},
 	};
@@ -120,12 +120,12 @@ function createCleanupMockExecutor(
 	forgottenBookmarks: string[] = [],
 ): CommandExecutor {
 	return {
-		exec: async (cmd: string[]) => {
-			return (
+		exec: (cmd: string[]) => {
+			return Promise.resolve(
 				handlePrViewCommand(cmd, prStateMap) ||
-				handleBookmarkDeleteCommand(cmd, deletedBookmarks) ||
-				handleBookmarkForgetCommand(cmd, forgottenBookmarks) ||
-				createMockResponse("", "Unknown command", 1)
+					handleBookmarkDeleteCommand(cmd, deletedBookmarks) ||
+					handleBookmarkForgetCommand(cmd, forgottenBookmarks) ||
+					createMockResponse("", "Unknown command", 1),
 			);
 		},
 	};
@@ -133,6 +133,74 @@ function createCleanupMockExecutor(
 
 describe("Auto Bookmark Manager", () => {
 	describe("findUnbookmarkedChanges", () => {
+		it("should not create auto-bookmarks for commits with merged PRs", async () => {
+			// Test for issue: auto-bookmarks recreated after PR merged
+			// Scenario: auto/jjsp-address-pr-feedback-for-prflow-mvuwmq was deleted as merged,
+			// but tool wants to recreate it for the same commit zumzutktynrkovoqtpxzrmrynzospyqr
+
+			// Arrange - commit exists but has no bookmark (was deleted after merge)
+			const logOutput = `zumzutktynrkovoqtpxzrmrynzospyqr 
+xvrxqsnrzpnkpwxsvtwskyrzrxvvryox 
+qvmssloumqwzpwuuzvntslprwpnxmuwp master`;
+
+			const showMap = {
+				zumzutktynrkovoqtpxzrmrynzospyqr:
+					"fix: resolve linting issues across multiple packages",
+				xvrxqsnrzpnkpwxsvtwskyrzrxvvryox: "feat: add new feature",
+			};
+
+			// Helper to handle PR list queries with merged PR info
+			// biome-ignore lint/complexity/noExcessiveCognitiveComplexity: Mock executors need complex logic
+			function handlePRListQuery(cmd: string[]): Response | null {
+				if (cmd[0] !== "gh" || !cmd.includes("pr") || !cmd.includes("list")) {
+					return null;
+				}
+
+				const searchIndex = cmd.indexOf("--search");
+				if (searchIndex === -1) {
+					return createMockResponse(JSON.stringify([]));
+				}
+
+				const searchTerm = cmd[searchIndex + 1];
+				// Return merged PR for the specific commit
+				if (searchTerm === "zumzutkt") {
+					return createMockResponse(
+						JSON.stringify([
+							{
+								number: 123,
+								state: "MERGED",
+								headRefName: "auto/jjsp-address-pr-feedback-for-prflow-mvuwmq",
+							},
+						]),
+					);
+				}
+
+				return createMockResponse(JSON.stringify([]));
+			}
+
+			const mockExecutor: CommandExecutor = {
+				exec: (cmd: string[]) => {
+					return Promise.resolve(
+						handleLogCommand(cmd, logOutput) ||
+							handleShowCommand(cmd, showMap) ||
+							handlePRListQuery(cmd) ||
+							createMockResponse("", "Unknown command", 1),
+					);
+				},
+			};
+
+			// Act
+			const unbookmarked = await findUnbookmarkedChanges(mockExecutor);
+
+			// Assert - commit with merged PR should be filtered out
+			// This test currently FAILS because the implementation doesn't check PR history
+			assertEquals(unbookmarked.length, 1);
+			assertEquals(
+				unbookmarked[0].changeId,
+				"xvrxqsnrzpnkpwxsvtwskyrzrxvvryox",
+			);
+		});
+
 		it("should detect unbookmarked changes when no bookmarks present", async () => {
 			// Arrange - simulating actual jj output format
 			const logOutput = `xvrxqsnrzpnkpwxsvtwskyrzrxvvryox 
@@ -318,9 +386,9 @@ ghi789  `;
 			// Arrange
 			let capturedCommand: string[] = [];
 			const mockExecutor: CommandExecutor = {
-				exec: async (cmd: string[]) => {
+				exec: (cmd: string[]) => {
 					capturedCommand = cmd;
-					return { stdout: "", stderr: "", code: 0 };
+					return Promise.resolve({ stdout: "", stderr: "", code: 0 });
 				},
 			};
 
@@ -359,10 +427,10 @@ ghi789  `;
               `;
 
 			const mockExecutor: CommandExecutor = {
-				exec: async (cmd: string[]) => {
-					return (
+				exec: (cmd: string[]) => {
+					return Promise.resolve(
 						handleBookmarkListCommand(cmd, bookmarkOutput) ||
-						createMockResponse("", "Unknown command", 1)
+							createMockResponse("", "Unknown command", 1),
 					);
 				},
 			};
@@ -394,10 +462,10 @@ ghi789  `;
               `;
 
 			const mockExecutor: CommandExecutor = {
-				exec: async (cmd: string[]) => {
-					return (
+				exec: (cmd: string[]) => {
+					return Promise.resolve(
 						handleBookmarkListCommand(cmd, bookmarkOutput) ||
-						createMockResponse("", "Unknown command", 1)
+							createMockResponse("", "Unknown command", 1),
 					);
 				},
 			};
@@ -423,10 +491,10 @@ ghi789  `;
               `;
 
 			const mockExecutor: CommandExecutor = {
-				exec: async (cmd: string[]) => {
-					return (
+				exec: (cmd: string[]) => {
+					return Promise.resolve(
 						handleBookmarkListCommand(cmd, bookmarkOutput) ||
-						createMockResponse("", "Unknown command", 1)
+							createMockResponse("", "Unknown command", 1),
 					);
 				},
 			};
@@ -449,10 +517,10 @@ master: mzmwrosu 606382ed Initial commit
 auto/jjsp-add-user-profile-szqzyp: szqzyprq bd5c84f0 feat: add user profile`;
 
 			const mockExecutor: CommandExecutor = {
-				exec: async (cmd: string[]) => {
-					return (
+				exec: (cmd: string[]) => {
+					return Promise.resolve(
 						handleBookmarkListCommand(cmd, bookmarkOutput) ||
-						createMockResponse("", "Unknown command", 1)
+							createMockResponse("", "Unknown command", 1),
 					);
 				},
 			};
@@ -528,6 +596,41 @@ auto/jjsp-add-user-profile-szqzyp: szqzyprq bd5c84f0 feat: add user profile`;
 			);
 		});
 
+		it("should respect dry-run mode and not delete bookmarks", async () => {
+			// Arrange
+			const deletedBookmarks: string[] = [];
+			const forgottenBookmarks: string[] = [];
+			const prStateMap = {
+				"auto/jjsp-feature-abc123": "MERGED",
+				"auto/jjsp-fix-bug-def456": "CLOSED",
+			};
+
+			const mockExecutor = createCleanupMockExecutor(
+				prStateMap,
+				deletedBookmarks,
+				forgottenBookmarks,
+			);
+
+			const autoBookmarks = [
+				"auto/jjsp-feature-abc123",
+				"auto/jjsp-fix-bug-def456",
+			];
+
+			// Act - with dryRun = true
+			const result = await cleanupMergedAutoBookmarks(
+				mockExecutor,
+				autoBookmarks,
+				true, // dryRun
+			);
+
+			// Assert
+			assertEquals(result.deleted.length, 2); // Should be marked as deleted
+			assertEquals(result.deleted.includes("auto/jjsp-feature-abc123"), true);
+			assertEquals(result.deleted.includes("auto/jjsp-fix-bug-def456"), true);
+			assertEquals(deletedBookmarks.length, 0); // But not actually deleted
+			assertEquals(forgottenBookmarks.length, 0); // And not forgotten
+		});
+
 		it("should handle bookmarks without PRs", async () => {
 			// Arrange
 			const deletedBookmarks: string[] = [];
@@ -564,12 +667,12 @@ auto/jjsp-add-user-profile-szqzyp: szqzyprq bd5c84f0 feat: add user profile`;
 			const forgottenBookmarks: string[] = [];
 			// Track both delete and forget commands
 			const mockExecutor: CommandExecutor = {
-				exec: async (cmd: string[]) => {
-					return (
+				exec: (cmd: string[]) => {
+					return Promise.resolve(
 						handleBookmarkDeleteCommand(cmd, deletedBookmarks) ||
-						handleBookmarkForgetCommand(cmd, forgottenBookmarks) ||
-						handlePrViewCommand(cmd, {}) ||
-						createMockResponse("", "Unknown command", 1)
+							handleBookmarkForgetCommand(cmd, forgottenBookmarks) ||
+							handlePrViewCommand(cmd, {}) ||
+							createMockResponse("", "Unknown command", 1),
 					);
 				},
 			};
