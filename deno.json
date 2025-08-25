@@ -1,5 +1,5 @@
 {
-	"version": "0.1.23",
+	"version": "0.1.24",
 	"tasks": {
 		"test": "deno test --allow-run --allow-read --allow-write --allow-env",
 		"test:watch": "deno test --allow-run --allow-read --allow-write --allow-env --watch",

@@ -39,7 +39,18 @@ async function getTrunkBookmarks(
 
 function filterLocalBookmarks(bookmarks: string): string[] {
 	const bookmarkList = bookmarks.split(/\s+/).filter((b) => b.length > 0);
-	return bookmarkList.filter((b) => !b.includes("@"));
+	return bookmarkList
+		.filter((b) => !b.includes("@"))
+		.map((b) => cleanBookmarkName(b));
+}
+
+function cleanBookmarkName(bookmark: string): string {
+	// Remove conflict markers (??) from bookmark names
+	// These appear when bookmarks are in a conflicted state
+	if (bookmark.endsWith("??")) {
+		return bookmark.slice(0, -2);
+	}
+	return bookmark;
 }
 
 function selectBestBaseBranch(localBookmarks: string[]): string {

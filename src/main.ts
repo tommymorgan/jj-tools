@@ -840,7 +840,9 @@ async function prepareBookmarksAndPRChain(
 	// Combine original bookmarks with newly created ones, excluding deleted ones
 	const deletedSet = new Set(deletedBookmarks);
 	const allBookmarkNames = new Set([
-		...stack.bookmarks.map((b) => b.name).filter((name) => !deletedSet.has(name)),
+		...stack.bookmarks
+			.map((b) => b.name)
+			.filter((name) => !deletedSet.has(name)),
 		...createdBookmarks,
 	]);
 

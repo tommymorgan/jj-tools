@@ -175,5 +175,52 @@ describe("Base Branch Detection", () => {
 			// Assert
 			assertEquals(base, null); // No local bookmarks available
 		});
+
+		it("should strip conflict markers from bookmark names", async () => {
+			// Arrange
+			const mockExecutor: CommandExecutor = {
+				exec: async (cmd: string[]) => {
+					if (cmd.includes("trunk()")) {
+						// Simulating output with conflict markers (??)
+						return {
+							stdout: "master??",
+							stderr: "",
+							code: 0,
+						};
+					}
+					return { stdout: "", stderr: "Unknown command", code: 1 };
+				},
+			};
+
+			// Act
+			const base = await detectBaseBranch(mockExecutor);
+
+			// Assert
+			assertEquals(base, "master"); // Should strip ?? suffix
+		});
+
+		it("should handle multiple bookmarks with conflict markers", async () => {
+			// Arrange
+			const mockExecutor: CommandExecutor = {
+				exec: async (cmd: string[]) => {
+					if (cmd.includes("trunk()")) {
+						// Simulating output with conflict markers on multiple bookmarks
+						return {
+							stdout: "custom-base?? main?? master",
+							stderr: "",
+							code: 0,
+						};
+					}
+					return { stdout: "", stderr: "Unknown command", code: 1 };
+				},
+			};
+
+			// Act
+			const base = await detectBaseBranch(mockExecutor);
+
+			// Assert
+			// Should prefer main (cleaned) over custom-base and master
+			assertEquals(base, "main");
+		});
 	});
 });
