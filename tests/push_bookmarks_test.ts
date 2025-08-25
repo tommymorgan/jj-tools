@@ -15,27 +15,34 @@ describe("pushBookmarksToGitHub function", () => {
 		const executedCommands: string[][] = [];
 		const baseBranch = "trunk"; // Non-standard base branch name
 
+		// Helper function to check if command matches a prefix
+		function findMatchingResponse(cmdString: string): CommandResponse | null {
+			const responses = [
+				{
+					prefix: "jj bookmark",
+					response: { stdout: "", stderr: "", code: 0 },
+				},
+				{
+					prefix: "jj git push",
+					response: { stdout: "Pushed successfully", stderr: "", code: 0 },
+				},
+			];
+
+			const match = responses.find((r) => cmdString.startsWith(r.prefix));
+			return match ? match.response : null;
+		}
+
+		// Helper function to get command response
+		function getCommandResponse(cmdString: string): CommandResponse {
+			const response = findMatchingResponse(cmdString);
+			return response || { stdout: "", stderr: "Unknown command", code: 1 };
+		}
+
 		const executor: CommandExecutor = {
-			// biome-ignore lint/complexity/noExcessiveCognitiveComplexity: Mock executors need complex logic
 			exec: (cmd: string[]): Promise<CommandResponse> => {
 				executedCommands.push(cmd);
-				// track bookmark commands succeed
-				if (cmd[0] === "jj" && cmd[1] === "bookmark") {
-					return Promise.resolve({ stdout: "", stderr: "", code: 0 });
-				}
-				// push command succeeds
-				if (cmd[0] === "jj" && cmd[1] === "git" && cmd[2] === "push") {
-					return Promise.resolve({
-						stdout: "Pushed successfully",
-						stderr: "",
-						code: 0,
-					});
-				}
-				return Promise.resolve({
-					stdout: "",
-					stderr: "Unknown command",
-					code: 1,
-				});
+				const cmdString = cmd.join(" ");
+				return Promise.resolve(getCommandResponse(cmdString));
 			},
 		};
 

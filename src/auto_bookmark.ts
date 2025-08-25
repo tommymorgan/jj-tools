@@ -234,21 +234,29 @@ export async function findAutoBookmarks(
 		return [];
 	}
 
-	const bookmarks: string[] = [];
 	const lines = result.stdout.split("\n").filter((line) => line.trim());
+	return lines
+		.map((line) => extractAutoBookmark(line))
+		.filter((bookmark): bookmark is string => bookmark !== null);
+}
 
-	for (const line of lines) {
-		const trimmed = line.trim();
-		// Only find bookmarks created by this tool (with jjsp marker)
-		if (trimmed.startsWith("auto/jjsp-")) {
-			// Extract just the bookmark name from the line
-			// Format is: "bookmark-name: commit-info..."
-			const bookmarkName = trimmed.split(":")[0].trim();
-			bookmarks.push(bookmarkName);
-		}
+function extractAutoBookmark(line: string): string | null {
+	const trimmed = line.trim();
+	// Only find bookmarks created by this tool (with jjsp marker)
+	if (!trimmed.startsWith("auto/jjsp-")) {
+		return null;
 	}
 
-	return bookmarks;
+	// Extract just the bookmark name from the line
+	// Format is: "bookmark-name: commit-info..." or "bookmark-name (deleted)"
+	let bookmarkName = trimmed.split(":")[0].trim();
+
+	// Remove the (deleted) suffix if present
+	if (bookmarkName.endsWith(" (deleted)")) {
+		bookmarkName = bookmarkName.replace(" (deleted)", "");
+	}
+
+	return bookmarkName;
 }
 
 async function getPRState(

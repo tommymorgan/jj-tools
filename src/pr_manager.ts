@@ -235,32 +235,124 @@ function buildChainFromCompleteList(
 	return chain;
 }
 
+function adjustPRsForDeletedBookmarks(
+	existingPRs: Map<string, ExistingPR>,
+	deletedSet: Set<string>,
+	completeChain: string[],
+	baseBranch: string,
+): Map<string, ExistingPR> {
+	// Build map of new bases for deleted bookmarks
+	const deletedToNewBase = buildDeletedToNewBaseMap(
+		completeChain,
+		deletedSet,
+		baseBranch,
+	);
+
+	// Adjust existing PRs
+	return adjustExistingPRs(existingPRs, deletedToNewBase);
+}
+
+function buildDeletedToNewBaseMap(
+	completeChain: string[],
+	deletedSet: Set<string>,
+	baseBranch: string,
+): Map<string, string> {
+	const deletedToNewBase = new Map<string, string>();
+
+	for (let i = 0; i < completeChain.length; i++) {
+		const bookmarkName = completeChain[i];
+		if (deletedSet.has(bookmarkName)) {
+			const newBase = findNewBaseForDeleted(
+				completeChain,
+				deletedSet,
+				i,
+				baseBranch,
+			);
+			deletedToNewBase.set(bookmarkName, newBase);
+		}
+	}
+
+	return deletedToNewBase;
+}
+
+function findNewBaseForDeleted(
+	completeChain: string[],
+	deletedSet: Set<string>,
+	currentIndex: number,
+	baseBranch: string,
+): string {
+	for (let j = currentIndex - 1; j >= 0; j--) {
+		if (!deletedSet.has(completeChain[j])) {
+			return completeChain[j];
+		}
+	}
+	return baseBranch;
+}
+
+function adjustExistingPRs(
+	existingPRs: Map<string, ExistingPR>,
+	deletedToNewBase: Map<string, string>,
+): Map<string, ExistingPR> {
+	const adjusted = new Map<string, ExistingPR>();
+
+	for (const [prName, pr] of existingPRs) {
+		const newBase = deletedToNewBase.get(pr.baseRefName);
+		if (newBase !== undefined) {
+			// This PR's base is being deleted, update it
+			adjusted.set(prName, {
+				...pr,
+				baseRefName: newBase,
+			});
+		} else {
+			// Keep the PR as-is
+			adjusted.set(prName, pr);
+		}
+	}
+
+	return adjusted;
+}
+
 export async function buildPRChainWithAutoCreate(
 	bookmarks: Bookmark[],
 	existingPRs: Map<string, ExistingPR>,
 	baseBranch: string,
 	executor: CommandExecutor,
+	deletedBookmarks: string[] = [],
 ): Promise<{ chain: PRInfo[]; createdBookmarks: string[] }> {
 	// First, build the complete chain including dependent PRs
 	const completeChain = buildCompleteChain(bookmarks, existingPRs, baseBranch);
 
-	// Find which bookmarks are missing locally
+	// Filter out bookmarks marked for deletion FIRST
+	const deletedSet = new Set(deletedBookmarks);
+
+	// Find which bookmarks are missing locally (excluding deleted ones)
 	const localBookmarkNames = new Set(bookmarks.map((b) => b.name));
 	const missingBookmarks = completeChain.filter(
-		(name) => !localBookmarkNames.has(name),
+		(name) => !localBookmarkNames.has(name) && !deletedSet.has(name),
 	);
 
-	// Create missing bookmarks
+	// Create missing bookmarks (excluding deleted ones)
 	const createdBookmarks = await createMissingBookmarks(
 		missingBookmarks,
 		executor,
 	);
 
-	// Build the PR chain
-	const chain = buildChainFromCompleteList(
-		completeChain,
-		bookmarks,
+	// Filter chain to exclude deleted bookmarks
+	const filteredChain = completeChain.filter((name) => !deletedSet.has(name));
+
+	// Adjust existing PRs to skip deleted bookmarks
+	const adjustedPRs = adjustPRsForDeletedBookmarks(
 		existingPRs,
+		deletedSet,
+		completeChain,
+		baseBranch,
+	);
+
+	// Build the PR chain, excluding bookmarks marked for deletion
+	const chain = buildChainFromCompleteList(
+		filteredChain,
+		bookmarks,
+		adjustedPRs,
 		baseBranch,
 	);
 

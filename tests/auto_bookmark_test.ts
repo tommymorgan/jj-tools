@@ -149,33 +149,38 @@ qvmssloumqwzpwuuzvntslprwpnxmuwp master`;
 				xvrxqsnrzpnkpwxsvtwskyrzrxvvryox: "feat: add new feature",
 			};
 
-			// Helper to handle PR list queries with merged PR info
-			// biome-ignore lint/complexity/noExcessiveCognitiveComplexity: Mock executors need complex logic
-			function handlePRListQuery(cmd: string[]): Response | null {
-				if (cmd[0] !== "gh" || !cmd.includes("pr") || !cmd.includes("list")) {
-					return null;
-				}
+			// Helper to check if it's a PR list command
+			function isPRListCommand(cmd: string[]): boolean {
+				return cmd.join(" ").includes("gh pr list");
+			}
 
+			// Helper to get PR list response based on search term
+			function getPRListResponse(searchTerm: string | undefined): Response {
+				const mergedPRData: Record<string, unknown[]> = {
+					zumzutkt: [
+						{
+							number: 123,
+							state: "MERGED",
+							headRefName: "auto/jjsp-address-pr-feedback-for-prflow-mvuwmq",
+						},
+					],
+				};
+
+				const data = searchTerm ? mergedPRData[searchTerm] || [] : [];
+				return createMockResponse(JSON.stringify(data));
+			}
+
+			// Helper to extract search term from command
+			function extractSearchTerm(cmd: string[]): string | undefined {
 				const searchIndex = cmd.indexOf("--search");
-				if (searchIndex === -1) {
-					return createMockResponse(JSON.stringify([]));
-				}
+				return searchIndex >= 0 ? cmd[searchIndex + 1] : undefined;
+			}
 
-				const searchTerm = cmd[searchIndex + 1];
-				// Return merged PR for the specific commit
-				if (searchTerm === "zumzutkt") {
-					return createMockResponse(
-						JSON.stringify([
-							{
-								number: 123,
-								state: "MERGED",
-								headRefName: "auto/jjsp-address-pr-feedback-for-prflow-mvuwmq",
-							},
-						]),
-					);
-				}
-
-				return createMockResponse(JSON.stringify([]));
+			// Helper to handle PR list queries with merged PR info
+			function handlePRListQuery(cmd: string[]): Response | null {
+				if (!isPRListCommand(cmd)) return null;
+				const searchTerm = extractSearchTerm(cmd);
+				return getPRListResponse(searchTerm);
 			}
 
 			const mockExecutor: CommandExecutor = {
@@ -575,6 +580,7 @@ auto/jjsp-add-user-profile-szqzyp: szqzyprq bd5c84f0 feat: add user profile`;
 			const result = await cleanupMergedAutoBookmarks(
 				mockExecutor,
 				autoBookmarks,
+				false, // dryRun
 			);
 
 			// Assert

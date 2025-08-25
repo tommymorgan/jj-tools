@@ -100,21 +100,23 @@ function handleValidationErrors(errors: string[]): void {
 async function cleanupAutoBookmarks(
 	options: CLIOptions,
 	executor: CommandExecutor,
-): Promise<void> {
-	if (options.keepAuto) return;
+): Promise<string[]> {
+	if (options.keepAuto) return [];
 
 	verbose("Cleaning up auto-bookmarks...");
 	const autoBookmarks = await findAutoBookmarks(executor);
 
 	if (options.cleanupAllAuto) {
 		await forceCleanupAllAutoBookmarks(autoBookmarks, options, executor);
+		return options.dryRun ? autoBookmarks : [];
 	} else if (autoBookmarks.length > 0) {
-		await cleanupMergedAutoBookmarksWrapper(
+		return await cleanupMergedAutoBookmarksWrapper(
 			autoBookmarks,
 			executor,
 			options.dryRun,
 		);
 	}
+	return [];
 }
 
 async function forceCleanupAllAutoBookmarks(
@@ -134,7 +136,7 @@ async function cleanupMergedAutoBookmarksWrapper(
 	autoBookmarks: string[],
 	executor: CommandExecutor,
 	dryRun = false,
-): Promise<void> {
+): Promise<string[]> {
 	const cleanupResult = await cleanupMergedAutoBookmarks(
 		executor,
 		autoBookmarks,
@@ -147,6 +149,7 @@ async function cleanupMergedAutoBookmarksWrapper(
 			verbose(`  ${deleted}: PR merged/closed, deleted`);
 		}
 	}
+	return cleanupResult.deleted;
 }
 
 async function handleUnbookmarkedChanges(
@@ -546,14 +549,17 @@ interface AppContext {
 }
 
 async function processStack(ctx: AppContext): Promise<void> {
-	await cleanupAutoBookmarks(ctx.options, ctx.executor);
+	const deletedBookmarks = await cleanupAutoBookmarks(
+		ctx.options,
+		ctx.executor,
+	);
 	await handleUnbookmarkedChanges(ctx.options, ctx.executor);
 	const stack = await detectAndValidateStack(ctx);
 	await checkForConflicts(ctx);
 
 	// Build PR chain and create missing bookmarks for dependent PRs
 	const { allBookmarks, prChain, existingPRs } =
-		await prepareBookmarksAndPRChain(ctx, stack);
+		await prepareBookmarksAndPRChain(ctx, stack, deletedBookmarks);
 
 	// Now push all bookmarks (including auto-created ones)
 	await pushBookmarksToGitHub(ctx.options, ctx.executor, {
@@ -810,6 +816,7 @@ export function reportCreatedBookmarks(
 async function prepareBookmarksAndPRChain(
 	ctx: AppContext,
 	stack: StackInfo,
+	deletedBookmarks: string[] = [],
 ): Promise<{
 	allBookmarks: Bookmark[];
 	prChain: PRInfo[];
@@ -824,6 +831,7 @@ async function prepareBookmarksAndPRChain(
 		existingPRs,
 		ctx.options.baseBranch,
 		ctx.executor,
+		deletedBookmarks,
 	);
 
 	// Report on any bookmarks that were auto-created
