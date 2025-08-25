@@ -837,9 +837,10 @@ async function prepareBookmarksAndPRChain(
 	// Report on any bookmarks that were auto-created
 	reportCreatedBookmarks(createdBookmarks, existingPRs, stack.bookmarks.length);
 
-	// Combine original bookmarks with newly created ones
+	// Combine original bookmarks with newly created ones, excluding deleted ones
+	const deletedSet = new Set(deletedBookmarks);
 	const allBookmarkNames = new Set([
-		...stack.bookmarks.map((b) => b.name),
+		...stack.bookmarks.map((b) => b.name).filter((name) => !deletedSet.has(name)),
 		...createdBookmarks,
 	]);
 
