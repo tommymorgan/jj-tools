@@ -107,25 +107,36 @@ describe("Deleted bookmark as dependency", () => {
 			return findPRViewResponse(bookmark || "");
 		};
 
-		const jjShowMessages = new Map([
-			["feat/cm-pr-approval-time", "feat: approval time"],
-			["auto/jjsp-address-pr-feedback", "fix: address feedback"],
-			["auto/jjsp-add-pr-file-count", "feat: file count"],
-		]);
+		// Use predicates to avoid complexity
+		type ResponsePredicate = {
+			predicate: (cmdStr: string) => boolean;
+			response: CommandResponse;
+		};
 
-		const findJJShowMessage = (cmdStr: string): string | undefined => {
-			const entry = Array.from(jjShowMessages.entries()).find(([key]) =>
-				cmdStr.includes(key),
-			);
-			return entry?.[1];
+		const jjShowPredicates: ResponsePredicate[] = [
+			{
+				predicate: (s) => s.includes("feat/cm-pr-approval-time"),
+				response: { stdout: "feat: approval time", stderr: "", code: 0 },
+			},
+			{
+				predicate: (s) => s.includes("auto/jjsp-address-pr-feedback"),
+				response: { stdout: "fix: address feedback", stderr: "", code: 0 },
+			},
+			{
+				predicate: (s) => s.includes("auto/jjsp-add-pr-file-count"),
+				response: { stdout: "feat: file count", stderr: "", code: 0 },
+			},
+		];
+
+		const findJJShowResponse = (cmdStr: string): CommandResponse | null => {
+			const match = jjShowPredicates.find((p) => p.predicate(cmdStr));
+			return match?.response || null;
 		};
 
 		const handleJJShow = (cmd: string[]): CommandResponse | null => {
 			const cmdStr = cmd.join(" ");
 			if (!cmdStr.startsWith("jj show")) return null;
-			const message = findJJShowMessage(cmdStr);
-			if (!message) return null;
-			return { stdout: message, stderr: "", code: 0 };
+			return findJJShowResponse(cmdStr);
 		};
 
 		const mockExecutor: CommandExecutor = {
